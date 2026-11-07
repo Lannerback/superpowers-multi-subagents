@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Denies history-mutating git commands for external agents. Guards mistakes, not hostile agents.
+set -euo pipefail
+guard_dir=$(cd "$(dirname "$0")" && pwd)
+clean_path=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$guard_dir" | paste -sd: -)
+
+args=("$@")
+i=0
+while [ "$i" -lt "$#" ]; do
+  case "${args[$i]}" in
+    -C|-c|--git-dir|--work-tree|--namespace) i=$((i + 2)) ;;
+    -*) i=$((i + 1)) ;;
+    *) break ;;
+  esac
+done
+sub="${args[$i]:-}"
+
+case "$sub" in
+  add|am|branch|checkout|cherry-pick|clean|commit|merge|mv|pull|push|rebase|reset|restore|revert|rm|stash|switch|tag)
+    echo "git $sub denied: git_policy is no-commit. Leave changes in the working tree." >&2
+    exit 126
+    ;;
+esac
+
+PATH="$clean_path" exec git "$@"
