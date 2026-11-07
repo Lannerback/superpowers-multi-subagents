@@ -9,6 +9,29 @@ SKILLS = Path(__file__).resolve().parents[1] / "skills"
 EXECUTOR = SKILLS / "subagent-driven-development-multi"
 
 
+class CommitGuardedSkillTest(unittest.TestCase):
+    def test_executor_documents_the_policy_and_the_grant_flag(self) -> None:
+        text = (EXECUTOR / "SKILL.md").read_text()
+        for needle in ("## Git policy `commit-guarded`", "--git-grant", "Git-allow", "explicit paths"):
+            self.assertIn(needle, text)
+
+    def test_executor_grants_need_a_clear_yes_from_the_user(self) -> None:
+        text = (EXECUTOR / "SKILL.md").read_text()
+        self.assertIn("clear yes", text)
+        self.assertIn("never on a worker's request", text)
+
+    def test_plan_skill_resolves_the_router_from_an_absolute_skill_dir(self) -> None:
+        text = (SKILLS / "writing-plans-multi-subagents/SKILL.md").read_text()
+        self.assertNotIn("`../", text)
+        self.assertIn("$SKILL_DIR/../subagent-driven-development-multi/scripts/agent-router", text)
+        self.assertIn("install both skills together", text)
+
+    def test_plan_skill_covers_commit_guarded_and_git_allow(self) -> None:
+        text = (SKILLS / "writing-plans-multi-subagents/SKILL.md").read_text()
+        for needle in ("commit-guarded", "**Git-allow:**", "denied unless"):
+            self.assertIn(needle, text)
+
+
 class SkillFilesTest(unittest.TestCase):
     def test_frontmatter_name_matches_folder(self) -> None:
         for name in ("writing-plans-multi-subagents", "subagent-driven-development-multi"):

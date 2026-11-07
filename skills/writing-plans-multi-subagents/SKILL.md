@@ -7,7 +7,9 @@ description: Use when the user wants an implementation plan whose tasks will run
 
 Announce: "I'm using writing-plans-multi-subagents to create the plan."
 
-Use the superpowers `writing-plans` skill and follow all of it. If your harness does not list it, run `../subagent-driven-development-multi/scripts/agent-router upstream-path` from this skill's directory and read `<that path>/writing-plans/SKILL.md`. Only these overrides apply.
+Use the superpowers `writing-plans` skill and follow all of it. If your harness does not list it, run `"$ROUTER" upstream-path` and read `<that path>/writing-plans/SKILL.md`. Only these overrides apply.
+
+`SKILL_DIR` is this skill's directory, as an absolute path. `ROUTER` is `$SKILL_DIR/../subagent-driven-development-multi/scripts/agent-router`. The two skills install together: if that file is missing, stop and tell your human partner to install both skills together (`python3 install.py --host auto` in the repo).
 
 ## Overrides
 
@@ -25,7 +27,12 @@ Use the superpowers `writing-plans` skill and follow all of it. If your harness 
 - `effort`: scale to how much reasoning the task needs. Most tasks are `medium`.
 - A task the orchestrator must run itself, such as one writing to a real external system, uses `Route: orchestrator`.
 
-**Git policy.** Run `../subagent-driven-development-multi/scripts/agent-router git-policy` from this skill's directory. If it prints `no-commit`, replace every commit step with "Summarize changed files and verification evidence", and add this Global Constraint: "Git: no agent stages, commits, pushes, resets, checks out, or stashes. Review uses working-tree diffs."
+**Git policy.** Run `"$ROUTER" git-policy`.
+
+- `no-commit`: replace every commit step with "Summarize changed files and verification evidence", and add this Global Constraint: "Git: no agent stages, commits, pushes, resets, checks out, or stashes. Review uses working-tree diffs."
+- `commit-guarded`: keep upstream's commit steps, but write each as `git add <the task's exact files>` then `git commit`, never `git add .`. Add this Global Constraint: "Git: agents may add explicit paths and commit. Reset, rebase, push, amend, checkout, switch, restore, clean, stash, merge, cherry-pick, revert, pull, rm, mv, and branch or tag changes are denied unless the task's Git-allow line names the exact command."
+- If a task truly needs one denied command, such as `push origin <branch>`, add under its Route line `**Git-allow:** <git arguments, exactly as they will be typed, without the leading git>`, one line per command. Say in the handoff that the executor will ask the user before granting each. Never write Git-allow for a destructive command such as `reset --hard`, force push or branch deletion unless the user asked for it in this conversation.
+- `allow`: follow upstream unchanged.
 
 **Leave out of the plan:** agent names, model IDs, fallback order, retry rules, and runner scripts. They live in the executor's config, so plans stay valid when the config changes.
 
