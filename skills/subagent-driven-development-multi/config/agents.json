@@ -38,7 +38,7 @@
     },
     "codex": {
       "enabled": true,
-      "command": ["codex", "exec", "-C", "{cwd}", "-s", "workspace-write", "--add-dir", "{workspace}", "-c", "sandbox_workspace_write.network_access=true", "-m", "{model}", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"],
+      "command": ["codex", "exec", "--skip-git-repo-check", "-C", "{cwd}", "-s", "workspace-write", "--add-dir", "{workspace}", "-c", "sandbox_workspace_write.network_access=true", "-m", "{model}", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"],
       "models": "all",
       "efforts": ["low", "medium", "high", "xhigh", "max"],
       "tiers": { "cheap": "gpt-5.6-luna", "standard": "gpt-5.6-terra", "capable": "gpt-5.6-sol" },
