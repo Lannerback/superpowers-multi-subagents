@@ -59,7 +59,7 @@ def _require_known_host(host: str, config: RouterConfig) -> None:
 
 def _run(args: argparse.Namespace, config: RouterConfig) -> int:
     request = _request(args)
-    guard = SKILL_ROOT / "scripts" / "git-guard" if config.git_policy == "no-commit" else None
+    guard = SKILL_ROOT / "scripts" / "git-guard" if config.git_policy != "allow" else None
     router = AgentRouter(
         config,
         ProcessRunner(),
@@ -84,6 +84,7 @@ def _request(args: argparse.Namespace) -> DispatchRequest:
         host=args.host, role=args.role, task=args.task, tier=args.tier, effort=args.effort,
         cwd=Path(args.cwd).resolve(), workspace=Path(args.workspace).resolve(),
         prompt_file=Path(args.prompt_file).resolve(), report_file=Path(args.report_file).resolve(),
+        git_grants=tuple(args.git_grant),
     )
     for flag, folder in (
         ("--cwd", request.cwd),
@@ -139,6 +140,10 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--workspace", required=True)
     run.add_argument("--prompt-file", required=True)
     run.add_argument("--report-file", required=True)
+    run.add_argument(
+        "--git-grant", action="append", default=[], metavar="ARGS",
+        help="one exact git command the user approved, e.g. \"push origin feature\"; repeatable",
+    )
     commands.add_parser("git-policy", help="print the configured git policy")
     commands.add_parser("upstream-path", help="print the superpowers skills directory")
     upstream = commands.add_parser("upstream-check", help="warn if upstream changed since review")

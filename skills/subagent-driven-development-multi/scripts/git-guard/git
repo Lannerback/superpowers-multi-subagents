@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Denies history-mutating git commands in the repository named by AGENT_ROUTER_GUARD_ROOT.
 # Other repositories pass, so test fixtures and package managers keep working.
+# AGENT_ROUTER_GIT_POLICY=commit-guarded also allows `add <explicit paths>` and a plain `commit`,
+# plus any command listed verbatim in the file named by AGENT_ROUTER_GIT_GRANTS_FILE.
 # Best-effort: it guards mistakes, not hostile agents.
 set -euo pipefail
 guard_dir=$(cd "$(dirname "$0")" && pwd)
 clean_path=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$guard_dir" | paste -sd: -)
 
 args=("$@")
+total=$#
 i=0
 while [ "$i" -lt "$#" ]; do
   case "${args[$i]}" in
@@ -17,6 +20,9 @@ while [ "$i" -lt "$#" ]; do
 done
 sub="${args[$i]:-}"
 first_arg="${args[$((i + 1))]:-}"
+
+policy="${AGENT_ROUTER_GIT_POLICY:-no-commit}"
+grants_file="${AGENT_ROUTER_GIT_GRANTS_FILE:-}"
 
 is_read_only_form() {
   case "$sub:$first_arg" in
@@ -33,10 +39,77 @@ targets_protected_repo() {
   [ -n "$target" ] && [ "$target" = "$AGENT_ROUTER_GUARD_ROOT" ]
 }
 
+is_granted() {
+  { [ -n "$grants_file" ] && [ -f "$grants_file" ]; } || return 1
+  local command_line="" j=$i
+  while [ "$j" -lt "$total" ]; do
+    command_line="$command_line ${args[$j]}"
+    j=$((j + 1))
+  done
+  grep -qxF -- "${command_line# }" "$grants_file"
+}
+
+hooks_overridden() {
+  local j=0 lowered
+  while [ "$j" -lt "$i" ]; do
+    lowered=$(printf '%s' "${args[$j]}" | tr '[:upper:]' '[:lower:]')
+    case "$lowered" in *hookspath*) return 0 ;; esac
+    j=$((j + 1))
+  done
+  return 1
+}
+
+safe_add() {
+  local j=$((i + 1)) paths=0
+  while [ "$j" -lt "$total" ]; do
+    case "${args[$j]}" in
+      .|./|:/|:/*|-A|--all|-u|--update|-f|--force|-p|--patch|-i|--interactive) return 1 ;;
+      -*) ;;
+      *) paths=$((paths + 1)) ;;
+    esac
+    j=$((j + 1))
+  done
+  [ "$paths" -gt 0 ]
+}
+
+safe_commit() {
+  local j=$((i + 1)) skip=0 arg
+  while [ "$j" -lt "$total" ]; do
+    arg="${args[$j]}"
+    j=$((j + 1))
+    if [ "$skip" = 1 ]; then skip=0; continue; fi
+    case "$arg" in
+      --amend|--no-verify|--all|--patch|--interactive|-a|-n|-p|-i) return 1 ;;
+      -m|-F|-c|-C|--message|--file|--author|--date|--reuse-message|--reedit-message) skip=1 ;;
+      --*) ;;
+      -[a-zA-Z][a-zA-Z]*)
+        case "$arg" in *[anpi]*) return 1 ;; esac
+        case "$arg" in *[mFcC]) skip=1 ;; esac
+        ;;
+    esac
+  done
+}
+
+is_allowed() {
+  [ "$policy" = commit-guarded ] || return 1
+  is_granted && return 0
+  hooks_overridden && return 1
+  case "$sub" in
+    add) safe_add ;;
+    commit) safe_commit ;;
+    *) return 1 ;;
+  esac
+}
+
 case "$sub" in
   add|am|branch|checkout|cherry-pick|clean|commit|merge|mv|pull|push|rebase|reset|restore|revert|rm|stash|switch|tag)
-    if ! is_read_only_form && targets_protected_repo; then
-      echo "git $sub denied: git_policy is no-commit. Leave changes in the working tree." >&2
+    if ! is_read_only_form && targets_protected_repo && ! is_allowed; then
+      if [ "$policy" = commit-guarded ]; then
+        echo "git $sub denied: git_policy is commit-guarded. Allowed: git add <paths>, git commit." >&2
+        echo "Anything else needs a grant named in the plan and approved by the user." >&2
+      else
+        echo "git $sub denied: git_policy is no-commit. Leave changes in the working tree." >&2
+      fi
       exit 126
     fi
     ;;

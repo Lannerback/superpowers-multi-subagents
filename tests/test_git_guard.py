@@ -95,3 +95,101 @@ class GitGuardTest(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 126, result.stderr)
+
+
+class CommitGuardedGuardTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.repo = tempfile.mkdtemp()
+        self.other = tempfile.mkdtemp()
+        for repo in (self.repo, self.other):
+            subprocess.run(["git", "init", "-q", repo], check=True)
+        self.grants = Path(tempfile.mkdtemp()) / "git-grants.txt"
+        self.env = {
+            **os.environ,
+            "PATH": f"{GUARD}:{os.environ['PATH']}",
+            "AGENT_ROUTER_GUARD_ROOT": toplevel(self.repo),
+            "AGENT_ROUTER_GIT_POLICY": "commit-guarded",
+            "AGENT_ROUTER_GIT_GRANTS_FILE": str(self.grants),
+            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+            "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+        }
+        (Path(self.repo) / "a.txt").write_text("a\n")
+
+    def _git(self, *args: str, cwd: str | None = None) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args], cwd=cwd or self.repo, env=self.env, capture_output=True, text=True
+        )
+
+    def _commit_one(self) -> None:
+        self.assertEqual(self._git("add", "a.txt").returncode, 0)
+        self.assertEqual(self._git("commit", "-q", "-m", "first").returncode, 0)
+
+    def test_add_explicit_path_and_commit_pass(self) -> None:
+        self._commit_one()
+        self.assertEqual(self._git("log", "--oneline").stdout.count("first"), 1)
+
+    def test_blanket_add_is_denied(self) -> None:
+        for form in ((".",), ("-A",), ("--all",), ("-u",), ("--update",), ("./",), ("-f", "a.txt"),
+                     ("--force", "a.txt"), ("-p",), ()):
+            result = self._git("add", *form)
+            self.assertEqual(result.returncode, 126, form)
+            self.assertIn("commit-guarded", result.stderr)
+
+    def test_dangerous_commit_flags_are_denied(self) -> None:
+        self._commit_one()
+        for form in (("--amend", "-m", "x"), ("--no-verify", "-m", "x"), ("-n", "-m", "x"),
+                     ("-a", "-m", "x"), ("--all", "-m", "x"), ("-am", "x"), ("-p",)):
+            self.assertEqual(self._git("commit", *form).returncode, 126, form)
+
+    def test_message_text_that_looks_like_a_flag_is_not_a_flag(self) -> None:
+        (Path(self.repo) / "a.txt").write_text("changed\n")
+        self._git("add", "a.txt")
+        self.assertEqual(self._git("commit", "-q", "-m", "-a --amend").returncode, 0)
+
+    def test_hooks_path_override_is_denied(self) -> None:
+        self._git("add", "a.txt")
+        result = self._git("-c", "core.hooksPath=/dev/null", "commit", "-m", "x")
+        self.assertEqual(result.returncode, 126)
+
+    def test_other_history_commands_are_denied(self) -> None:
+        for form in (("push",), ("reset", "--hard"), ("rebase", "x"), ("checkout", "x"),
+                     ("switch", "x"), ("restore", "a.txt"), ("clean", "-fd"), ("stash",),
+                     ("merge", "x"), ("cherry-pick", "x"), ("revert", "x"), ("pull",),
+                     ("rm", "a.txt"), ("mv", "a", "b"), ("branch", "-D", "x"), ("tag", "-d", "x"),
+                     ("am",)):
+            self.assertEqual(self._git(*form).returncode, 126, form)
+
+    def test_read_only_commands_pass(self) -> None:
+        for form in (("status", "--short"), ("diff",), ("branch", "--list"), ("stash", "list")):
+            self.assertEqual(self._git(*form).returncode, 0, form)
+
+    def test_exact_grant_allows_one_command(self) -> None:
+        self.grants.write_text("reset --soft HEAD\n")
+        self._commit_one()
+        self.assertEqual(self._git("reset", "--soft", "HEAD").returncode, 0)
+        self.assertEqual(self._git("reset", "--hard", "HEAD").returncode, 126)
+
+    def test_grant_ignores_global_flags_but_not_arguments(self) -> None:
+        self.grants.write_text("reset --soft HEAD\n")
+        self._commit_one()
+        self.assertEqual(self._git("-C", self.repo, "reset", "--soft", "HEAD").returncode, 0)
+        self.assertEqual(self._git("reset", "--soft", "HEAD~0").returncode, 126)
+
+    def test_grant_is_exact_not_a_prefix(self) -> None:
+        self.grants.write_text("push\n")
+        self.assertEqual(self._git("push", "--force").returncode, 126)
+
+    def test_other_repositories_are_not_guarded(self) -> None:
+        self.assertNotEqual(self._git("reset", "-q", cwd=self.other).returncode, 126)
+
+    def test_no_commit_policy_ignores_grants(self) -> None:
+        self.env["AGENT_ROUTER_GIT_POLICY"] = "no-commit"
+        self.grants.write_text("add a.txt\n")
+        self.assertEqual(self._git("add", "a.txt").returncode, 126)
+
+    def test_system_bash_runs_commit_guarded(self) -> None:
+        result = subprocess.run(
+            ["/bin/bash", str(GUARD / "git"), "add", "."], cwd=self.repo, env=self.env,
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 126, result.stderr)

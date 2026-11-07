@@ -72,6 +72,48 @@ class CliCase(unittest.TestCase):
         return path.read_text() if path.exists() else ""
 
 
+class CommitGuardedWiringTest(CliCase):
+    def _seed(self) -> None:
+        for args in (["commit", "-q", "--allow-empty", "-m", "one"],
+                     ["commit", "-q", "--allow-empty", "-m", "two"]):
+            subprocess.run(["git", *args], cwd=self.repo, check=True)
+
+    def _report_body(self, work: str) -> str:
+        return f'{work}\necho "Status: DONE" >> "$REPORT"'
+
+    def test_worker_commits_but_cannot_reset(self) -> None:
+        self._seed()
+        self._config(self._report_body(
+            'touch f\ngit add f\ngit commit -qm task\ngit reset -q --hard HEAD~1\necho "reset_rc=$?" > "$REPORT"'
+        ), policy="commit-guarded")
+        result = self._router(*self._args())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("reset_rc=126", self.report.read_text())
+        self.assertRegex(self._ledger(), r"result=ok commits=[0-9a-f]{7}\.\.[0-9a-f]{7}")
+
+    def test_git_grant_allows_exactly_that_command(self) -> None:
+        self._seed()
+        self._config(self._report_body(
+            'git reset -q --soft HEAD~1\necho "soft_rc=$?" > "$REPORT"\n'
+            'git reset -q --hard HEAD\necho "hard_rc=$?" >> "$REPORT"'
+        ), policy="commit-guarded")
+        result = self._router(*self._args(), "--git-grant", "reset -q --soft HEAD~1")
+        self.assertIn("soft_rc=0", self.report.read_text())
+        self.assertIn("hard_rc=126", self.report.read_text())
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("git_policy_violation", result.stdout)
+
+    def test_bad_grant_is_an_error(self) -> None:
+        self._config('echo "Status: DONE" > "$REPORT"', policy="commit-guarded")
+        result = self._router(*self._args(), "--git-grant", "git push")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("grant", result.stdout)
+
+    def test_git_policy_command_prints_the_policy(self) -> None:
+        self._config("true", policy="commit-guarded")
+        self.assertEqual(self._router("git-policy").stdout.strip(), "commit-guarded")
+
+
 class GuardWiringTest(CliCase):
     def test_worker_is_denied_in_the_cwd_repo(self) -> None:
         self._config('touch new.txt\ngit add new.txt\necho "add_rc=$?" > "$REPORT"\necho "Status: DONE" >> "$REPORT"')

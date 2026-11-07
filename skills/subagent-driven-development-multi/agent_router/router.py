@@ -9,7 +9,15 @@ from pathlib import Path
 
 from agent_router.command_builder import build_env, render_command
 from agent_router.exhaustion_state import ExhaustionState
-from agent_router.git_state import git_fingerprint, git_toplevel
+from agent_router.git_grants import normalize_grant, write_grants_file
+from agent_router.git_state import (
+    GitPosition,
+    advanced_cleanly,
+    commit_range,
+    git_fingerprint,
+    git_position,
+    git_toplevel,
+)
 from agent_router.ledger import Ledger
 from agent_router.models import AgentConfig, DispatchRequest, DispatchResult, RouterConfig
 from agent_router.outcomes import is_token_error, read_report_status
@@ -22,6 +30,8 @@ EXIT_EXHAUSTED = 75
 
 GIT_POLICY_VIOLATION = "git_policy_violation"
 GUARD_ROOT_VAR = "AGENT_ROUTER_GUARD_ROOT"
+GIT_POLICY_VAR = "AGENT_ROUTER_GIT_POLICY"
+GIT_GRANTS_VAR = "AGENT_ROUTER_GIT_GRANTS_FILE"
 
 
 class AgentRouter:
@@ -47,6 +57,8 @@ class AgentRouter:
         self._failed_before = False
 
     def dispatch(self, request: DispatchRequest) -> DispatchResult:
+        for grant in request.git_grants:
+            normalize_grant(grant)
         for agent in self._candidates(request):
             result = self._try_agent(agent, request)
             if result is not None:
@@ -87,15 +99,15 @@ class AgentRouter:
                 self._config.limits.run_seconds,
                 self._config.limits.stall_seconds,
             )
-            if git_before is not None and git_before != git_fingerprint(request.cwd, self._environ):
+            if self._git_violated(request, git_before):
                 self._ledger.record(request, agent.name, model, attempt, GIT_POLICY_VIOLATION)
                 return DispatchResult(
                     "BLOCKED", agent.name, model, EXIT_BLOCKED, log,
-                    note=f"{GIT_POLICY_VIOLATION}: HEAD or the index changed during the run",
+                    note=f"{GIT_POLICY_VIOLATION}: {self._violation_text()}",
                 )
             status = read_report_status(request.report_file, started_at)
             if outcome.returncode == 0 and status is not None:
-                self._ledger.record(request, agent.name, model, attempt, "ok")
+                self._ledger.record(request, agent.name, model, attempt, self._ok_result(request, git_before))
                 return DispatchResult(status, agent.name, model, EXIT_OK, log)
             self._failed_before = True
             if is_token_error(outcome, log, agent.token_error_patterns):
@@ -107,11 +119,28 @@ class AgentRouter:
                 return None
         return None
 
-    def _no_commit(self) -> bool:
-        return self._config.git_policy == "no-commit"
+    def _git_baseline(self, request: DispatchRequest) -> str | GitPosition | None:
+        if self._config.git_policy == "no-commit":
+            return git_fingerprint(request.cwd, self._environ)
+        if self._config.git_policy == "commit-guarded":
+            return git_position(request.cwd, self._environ)
+        return None
 
-    def _git_baseline(self, request: DispatchRequest) -> str | None:
-        return git_fingerprint(request.cwd, self._environ) if self._no_commit() else None
+    def _git_violated(self, request: DispatchRequest, before: str | GitPosition | None) -> bool:
+        if isinstance(before, GitPosition):
+            return not advanced_cleanly(request.cwd, self._environ, before)
+        return before is not None and before != git_fingerprint(request.cwd, self._environ)
+
+    def _violation_text(self) -> str:
+        if self._config.git_policy == "commit-guarded":
+            return "history was rewritten or the branch changed during the run"
+        return "HEAD or the index changed during the run"
+
+    def _ok_result(self, request: DispatchRequest, before: str | GitPosition | None) -> str:
+        if not isinstance(before, GitPosition):
+            return "ok"
+        commits = commit_range(before, git_position(request.cwd, self._environ))
+        return f"ok commits={commits}" if commits else "ok"
 
     def _values(self, model: str, request: DispatchRequest) -> dict[str, str]:
         return {
@@ -124,7 +153,7 @@ class AgentRouter:
         }
 
     def _prompt(self, request: DispatchRequest, retry: bool) -> str:
-        return build_prompt(request.prompt_file.read_text(), request, self._no_commit(), retry)
+        return build_prompt(request.prompt_file.read_text(), request, self._config.git_policy, retry)
 
     def _write_host_prompt(self, request: DispatchRequest) -> Path:
         path = request.workspace / f"task-{request.task}-{request.role}-host-prompt.md"
@@ -135,6 +164,9 @@ class AgentRouter:
         extra = self._agent_env(request)
         if self._guard_dir is not None:
             extra[GUARD_ROOT_VAR] = git_toplevel(request.cwd, self._environ) or ""
+            extra[GIT_POLICY_VAR] = self._config.git_policy
+            if request.git_grants:
+                extra[GIT_GRANTS_VAR] = str(write_grants_file(request.workspace, request.git_grants))
             if agent.guard_env_file_var:
                 extra[agent.guard_env_file_var] = str(self._write_guard_env_file(request.workspace))
         return build_env(

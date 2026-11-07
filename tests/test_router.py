@@ -17,7 +17,7 @@ FAIL = "exit 1"
 TOKEN = 'echo "HTTP 429 quota" ; exit 1'
 
 
-class RouterTest(unittest.TestCase):
+class RouterFixture(unittest.TestCase):
     def setUp(self) -> None:
         self.dir = Path(tempfile.mkdtemp())
         self.ws = self.dir / "ws"
@@ -55,6 +55,8 @@ class RouterTest(unittest.TestCase):
         guard_dir: Path | None = None,
         stall: int = 30,
         which=shutil.which,
+        cwd: Path | None = None,
+        grants: tuple[str, ...] = (),
     ):
         config = RouterConfig(
             order=tuple(self.agents), agents=self.agents,
@@ -70,12 +72,15 @@ class RouterTest(unittest.TestCase):
         )
         return router.dispatch(DispatchRequest(
             host=host, role="implementer", task="1", tier="cheap", effort="low",
-            cwd=self.dir, workspace=self.ws, prompt_file=self.prompt, report_file=self.report,
+            cwd=cwd or self.dir, workspace=self.ws, prompt_file=self.prompt, report_file=self.report,
+            git_grants=grants,
         ))
 
     def _ledger(self) -> str:
         return (self.ws / "progress.md").read_text()
 
+
+class RouterTest(RouterFixture):
     def test_first_agent_success(self) -> None:
         self._agent("a", OK)
         self._agent("b", OK)
@@ -230,3 +235,60 @@ class RouterTest(unittest.TestCase):
         self._agent("b", OK)
         self.assertEqual(self._dispatch().runner, "b")
         self.assertIn("runner=a model=a-m effort=low attempt=0 result=effort_unsupported", self._ledger())
+
+
+GIT = "git -c user.email=t@t -c user.name=t"
+
+
+class CommitGuardedRouterTest(RouterFixture):
+    def setUp(self) -> None:
+        super().setUp()
+        self.repo = self.dir / "repo"
+        self.repo.mkdir()
+        for command in (f"{GIT} init -q", f"{GIT} commit -q --allow-empty -m one",
+                        f"{GIT} commit -q --allow-empty -m two"):
+            subprocess.run(command, shell=True, cwd=self.repo, check=True)
+
+    def _run(self, body: str, **kwargs):
+        self._agent("a", f"{body}\n{OK}")
+        return self._dispatch(policy="commit-guarded", cwd=self.repo, **kwargs)
+
+    def test_new_commits_are_ok_and_recorded_as_a_range(self) -> None:
+        result = self._run(f"{GIT} commit -q --allow-empty -m three")
+        self.assertEqual((result.status, result.exit_code), ("DONE", EXIT_OK))
+        self.assertRegex(self._ledger(), r"attempt=1 result=ok commits=[0-9a-f]{7}\.\.[0-9a-f]{7}\n")
+
+    def test_no_new_commits_records_plain_ok(self) -> None:
+        self._run("true")
+        self.assertIn("attempt=1 result=ok\n", self._ledger())
+
+    def test_rewritten_history_is_blocked(self) -> None:
+        result = self._run("git reset -q --hard HEAD~1")
+        self.assertEqual((result.status, result.exit_code), ("BLOCKED", EXIT_BLOCKED))
+        self.assertIn("git_policy_violation", result.note)
+        self.assertIn("result=git_policy_violation", self._ledger())
+
+    def test_switching_branch_is_blocked(self) -> None:
+        result = self._run("git checkout -q -b elsewhere")
+        self.assertEqual(result.status, "BLOCKED")
+
+    def test_policy_and_grants_reach_the_worker(self) -> None:
+        guard = self.dir / "guard"
+        guard.mkdir()
+        out = self.dir / "env.out"
+        result = self._run(
+            f'printf "%s|%s" "$AGENT_ROUTER_GIT_POLICY" "$(cat "$AGENT_ROUTER_GIT_GRANTS_FILE")" > "{out}"',
+            guard_dir=guard, grants=("push origin  feature",),
+        )
+        self.assertEqual(result.exit_code, EXIT_OK)
+        self.assertEqual(out.read_text(), "commit-guarded|push origin feature")
+
+    def test_prompt_states_the_commit_rule(self) -> None:
+        self._run("true")
+        prompt = (self.dir / "a.prompt").read_text()
+        self.assertTrue(prompt.startswith("Git rule: you may `git add <explicit paths>` and `git commit`."))
+
+    def test_grant_with_a_newline_is_rejected(self) -> None:
+        self._agent("a", OK)
+        with self.assertRaisesRegex(ValueError, "grant"):
+            self._dispatch(policy="commit-guarded", cwd=self.repo, grants=("push\nreset --hard",))

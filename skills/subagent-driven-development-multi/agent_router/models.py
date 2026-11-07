@@ -6,7 +6,7 @@ from pathlib import Path
 
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 TIERS = ("cheap", "standard", "capable")
-GIT_POLICIES = ("no-commit", "allow")
+GIT_POLICIES = ("no-commit", "commit-guarded", "allow")
 HOST_FALLBACKS = ("subagent", "block")
 OTHER_HOST = "other"
 
@@ -55,6 +55,7 @@ class DispatchRequest:
     workspace: Path
     prompt_file: Path
     report_file: Path
+    git_grants: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
