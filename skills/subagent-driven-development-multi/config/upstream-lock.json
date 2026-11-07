@@ -1,4 +1,14 @@
 {
   "writing-plans/SKILL.md": "a6c67c1900064347c2a329990dd3c555657c51c3ec53b259a08aa01a2c26139a",
-  "subagent-driven-development/SKILL.md": "1baf70e307bde682c462513c86116333f1f066168c6710f45145bf5f0b00828d"
+  "subagent-driven-development/SKILL.md": "1baf70e307bde682c462513c86116333f1f066168c6710f45145bf5f0b00828d",
+  "subagent-driven-development/implementer-prompt.md": "81dd9d5a3fb0b09b96b5829f03b9796842f3199ef7591d1ba1c2db2a515f64d0",
+  "subagent-driven-development/task-reviewer-prompt.md": "61a04c2fb29907887d8babee1594f5e35ae26d461e7e584f5b7c283215165e08",
+  "subagent-driven-development/re-review-prompt.md": "ad54d0a10f1c2c8e656456e0a46e654af5dfe5ee6bcef63428cfd69b8dcd9311",
+  "subagent-driven-development/references/resuming.md": "ff6e38bde2276faa2a7e93513086caded0ea10edbf2ec7f349a7e3b0d7c668c4",
+  "subagent-driven-development/references/fix-loop.md": "1938ce707915efc44021e563ebc29666329e20ad861b6c50b89f305b8f4e8d8b",
+  "subagent-driven-development/references/final-review.md": "6c9e12093e46c4ad0a203bc07709c17e3470f855f1b78e55c5e7b722a012a32c",
+  "subagent-driven-development/references/handling-reports.md": "8f759cdd4936220c38aab05b6d6c48c6df8ac8f146b0f37a6d2facbf87133c67",
+  "subagent-driven-development/scripts/sdd-workspace": "de3af5252fa595fc2000ba05cf69e06187d5c8aae9d283cced4c167ad1813061",
+  "subagent-driven-development/scripts/task-brief": "0f244a12e146393c552ba62069d3eedcc85cb3f76de67b01f4e11219e5ebbcd8",
+  "requesting-code-review/code-reviewer.md": "82e370be6b3447523816286195571e4216ba56ba1ad6ad0e87862294c4c78dcb"
 }
