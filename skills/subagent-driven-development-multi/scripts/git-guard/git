@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Denies history-mutating git commands for external agents. Guards mistakes, not hostile agents.
+# Denies history-mutating git commands in the repository named by AGENT_ROUTER_GUARD_ROOT.
+# Other repositories pass, so test fixtures and package managers keep working.
+# Best-effort: it guards mistakes, not hostile agents.
 set -euo pipefail
 guard_dir=$(cd "$(dirname "$0")" && pwd)
 clean_path=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vxF "$guard_dir" | paste -sd: -)
@@ -14,11 +16,29 @@ while [ "$i" -lt "$#" ]; do
   esac
 done
 sub="${args[$i]:-}"
+first_arg="${args[$((i + 1))]:-}"
+
+is_read_only_form() {
+  case "$sub:$first_arg" in
+    branch:|branch:--show-current|branch:--list|tag:|tag:-l|tag:--list|stash:list) return 0 ;;
+  esac
+  return 1
+}
+
+targets_protected_repo() {
+  # No root means the caller did not name a repository: fail closed.
+  [ -n "${AGENT_ROUTER_GUARD_ROOT+set}" ] || return 0
+  local target
+  target=$(PATH="$clean_path" git "${args[@]:0:$i}" rev-parse --show-toplevel 2>/dev/null) || return 1
+  [ -n "$target" ] && [ "$target" = "$AGENT_ROUTER_GUARD_ROOT" ]
+}
 
 case "$sub" in
   add|am|branch|checkout|cherry-pick|clean|commit|merge|mv|pull|push|rebase|reset|restore|revert|rm|stash|switch|tag)
-    echo "git $sub denied: git_policy is no-commit. Leave changes in the working tree." >&2
-    exit 126
+    if ! is_read_only_form && targets_protected_repo; then
+      echo "git $sub denied: git_policy is no-commit. Leave changes in the working tree." >&2
+      exit 126
+    fi
     ;;
 esac
 
