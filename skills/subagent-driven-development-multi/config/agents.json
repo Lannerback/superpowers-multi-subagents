@@ -1,0 +1,64 @@
+{
+  "order": ["opencode", "codex", "claude", "cursor", "alter"],
+  "host_fallback": { "claude": "subagent", "codex": "subagent", "opencode": "subagent" },
+  "git_policy": "no-commit",
+  "limits": {
+    "run_seconds": 2700,
+    "stall_seconds": 600,
+    "error_attempts": 3,
+    "token_cooldown_seconds": 3600
+  },
+  "token_error_patterns": [
+    "token.{0,40}(expired|exhausted|limit)",
+    "expired.{0,20}token",
+    "usage limit",
+    "rate limit",
+    "quota",
+    "unauthori[sz]ed",
+    "authentication",
+    "failed to authenticate",
+    "session expired",
+    "not logged in",
+    "model is not supported",
+    "requires a newer version",
+    "HTTP 401",
+    "HTTP 429"
+  ],
+  "agents": {
+    "opencode": {
+      "enabled": true,
+      "command": ["opencode", "run", "-m", "{model}#{effort}", "--auto", "--title", "{title}", "{prompt}"],
+      "models": ["agent-platform/anthropic/claude-sonnet-5-5", "agent-platform/anthropic/claude-opus-5-5"],
+      "efforts": ["low", "medium", "high", "xhigh", "max"],
+      "tiers": {
+        "cheap": "agent-platform/anthropic/claude-sonnet-5-5",
+        "standard": "agent-platform/anthropic/claude-sonnet-5-5",
+        "capable": "agent-platform/anthropic/claude-opus-5-5"
+      }
+    },
+    "codex": {
+      "enabled": true,
+      "command": ["codex", "exec", "-C", "{cwd}", "-s", "workspace-write", "--add-dir", "{workspace}", "-c", "sandbox_workspace_write.network_access=true", "-m", "{model}", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"],
+      "models": "all",
+      "efforts": ["low", "medium", "high", "xhigh", "max"],
+      "tiers": { "cheap": "gpt-5.6-luna", "standard": "gpt-5.6-terra", "capable": "gpt-5.6-sol" },
+      "add_dir_flag": "--add-dir",
+      "optional_dirs": ["~/.cache/uv", "~/.pub-cache"]
+    },
+    "claude": {
+      "enabled": true,
+      "command": ["claude", "-p", "{prompt}", "--model", "{model}", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash,Read,Edit,Write,Grep,Glob", "--add-dir", "{workspace}"],
+      "models": "all",
+      "efforts": ["low", "medium", "high", "xhigh", "max"],
+      "tiers": { "cheap": "haiku", "standard": "sonnet", "capable": "opus" },
+      "unset_env_prefixes": ["CLAUDE"]
+    },
+    "cursor": {
+      "enabled": false,
+      "command": ["cursor-agent", "-p", "--force", "--output-format", "text", "--model", "{model}", "{prompt}"],
+      "models": "all",
+      "tiers": { "cheap": "sonnet-4", "standard": "sonnet-4", "capable": "gpt-5" }
+    },
+    "alter": { "enabled": false }
+  }
+}
