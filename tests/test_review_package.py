@@ -29,6 +29,26 @@ class ReviewPackageTest(unittest.TestCase):
         )
         text = self.out.read_text()
         self.assertIn("+new", text)
-        self.assertIn("=== new file: added.txt", text)
+        self.assertIn("added.txt", text)
         self.assertIn("brand new", text)
         self.assertNotIn("unrelated", text)
+
+    def test_base_excludes_earlier_uncommitted_work(self) -> None:
+        snapshot = SCRIPT.parent / "worktree-snapshot"
+        base = subprocess.run(
+            [str(snapshot), "-C", str(self.repo)], check=True, capture_output=True, text=True
+        ).stdout.strip()
+        (self.repo / "tracked.txt").write_text("newer\n")
+        (self.repo / "later.txt").write_text("later file\n")
+        subprocess.run(
+            [str(SCRIPT), "-C", str(self.repo), "--base", base, str(self.out), "tracked.txt", "added.txt", "later.txt"],
+            check=True,
+        )
+        text = self.out.read_text()
+        self.assertIn("+newer", text)
+        self.assertIn("later file", text)
+        self.assertNotIn("brand new", text)
+        status = subprocess.run(
+            ["git", "status", "--short"], cwd=self.repo, check=True, capture_output=True, text=True
+        ).stdout
+        self.assertIn("?? added.txt", status)

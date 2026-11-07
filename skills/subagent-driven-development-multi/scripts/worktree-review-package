@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# Review package for plans that do not commit: status, stat, diff against HEAD, and new files.
-# Usage: worktree-review-package [-C DIR] OUTFILE [PATH...]
+# Review package for plans that do not commit: stat and diff from a base to the working tree.
+# BASE is a tree or commit id, normally from worktree-snapshot. Default: HEAD.
+# Usage: worktree-review-package [-C DIR] [--base BASE] OUTFILE [PATH...]
 set -euo pipefail
-if [ "${1:-}" = "-C" ]; then
-  cd "$2"
-  shift 2
-fi
-[ $# -ge 1 ] || { echo "usage: worktree-review-package [-C DIR] OUTFILE [PATH...]" >&2; exit 2; }
+here=$(cd "$(dirname "$0")" && pwd)
+dir=.
+base=HEAD
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -C) dir=$2; shift 2 ;;
+    --base) base=$2; shift 2 ;;
+    *) break ;;
+  esac
+done
+[ $# -ge 1 ] || { echo "usage: worktree-review-package [-C DIR] [--base BASE] OUTFILE [PATH...]" >&2; exit 2; }
 out=$1
 shift
+current=$("$here/worktree-snapshot" -C "$dir")
 {
-  git status --short -- "$@"
-  git diff --stat HEAD -- "$@"
-  git diff -U10 HEAD -- "$@"
-  git ls-files --others --exclude-standard -- "$@" | while IFS= read -r file; do
-    echo "=== new file: $file"
-    cat "$file"
-  done
+  git -C "$dir" diff --stat "$base" "$current" -- "$@"
+  git -C "$dir" diff -U10 "$base" "$current" -- "$@"
 } > "$out"
 echo "$out"

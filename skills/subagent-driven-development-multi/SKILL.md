@@ -36,6 +36,7 @@ Replace every subagent dispatch, for implementers, reviewers, fixers and the fin
 - **`Route: orchestrator`:** run that task yourself.
 - **Fix rounds:** external agents cannot be resumed. Every round is a fresh dispatch carrying the brief path, report path and findings, which upstream allows.
 - Read only the router's output and, when needed, the report file. Do not read logs unless a dispatch failed.
+- **Long runs:** a dispatch can last `limits.run_seconds` for each attempt on each agent, far beyond a normal shell timeout. Run it with your harness's background execution and wait for its completion notice. If your harness has none, start it with `nohup`, redirect its output to `<workspace>/task-<N>-<role>-router.out`, and check for that process's exit. Never rely on a foreground call.
 
 ## Router exits
 
@@ -56,7 +57,8 @@ The ledger stays upstream's `<workspace>/progress.md`. The router appends `Agent
 External agents run with a git guard on `PATH`, which denies mutating commands. Applies only when `git-policy` prints `no-commit`:
 
 - Ignore upstream's commit instructions, for every role, and for yourself.
-- BASE is not used. Replace `review-package` with `scripts/worktree-review-package -C <repo> <workspace>/task-<N>-review.diff <task paths>`, using the task's Files list. For the final review, pass no paths.
+- Before each dispatch that changes code, record a snapshot: `BASE=$(scripts/worktree-snapshot -C <repo>)`. It touches neither the index nor history.
+- Replace `review-package` with `scripts/worktree-review-package -C <repo> --base <BASE> <workspace>/task-<N>-review.diff <task paths>`, using the task's Files list. For a scoped re-review, use the snapshot taken before that fix round. For the final review, use the snapshot taken before Task 1 and pass no paths.
 - Before Task 1, run `git status --short` in each repository and record it in the ledger as the baseline, so reviewers do not attribute those files to a task.
 - Completion lines become `Task <N>: complete (<changed files>; <test evidence>; review clean)`.
 - Do not stage, commit or push at the end. Report the changed files and let your human partner decide.

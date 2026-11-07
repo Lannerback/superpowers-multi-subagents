@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Print a tree id for the working tree, including untracked files, respecting .gitignore.
+# Uses a temporary index, so the real index, HEAD and branches are untouched.
+# Usage: worktree-snapshot [-C DIR]
+set -euo pipefail
+if [ "${1:-}" = "-C" ]; then
+  cd "$2"
+  shift 2
+fi
+index=$(mktemp)
+rm -f "$index"
+trap 'rm -f "$index"' EXIT
+GIT_INDEX_FILE="$index" git add -A
+GIT_INDEX_FILE="$index" git write-tree
