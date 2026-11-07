@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from agent_router.models import AgentConfig
@@ -27,12 +27,10 @@ def build_env(
     base: Mapping[str, str],
     extra: Mapping[str, str],
     guard_dir: Path | None,
+    host_session_prefixes: Sequence[str],
 ) -> dict[str, str]:
-    env = {
-        key: value
-        for key, value in base.items()
-        if not any(key.startswith(prefix) for prefix in agent.unset_env_prefixes)
-    }
+    stripped = (*host_session_prefixes, *agent.unset_env_prefixes)
+    env = {key: value for key, value in base.items() if not key.startswith(stripped)}
     env.update(extra)
     if guard_dir is not None:
         env["PATH"] = f"{guard_dir}:{env.get('PATH', '')}"

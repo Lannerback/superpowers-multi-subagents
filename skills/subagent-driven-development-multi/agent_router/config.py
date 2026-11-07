@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from agent_router.models import (
@@ -25,7 +26,13 @@ def resolve_config_path(skill_root: Path, home: Path) -> Path:
 def load_config(path: Path) -> RouterConfig:
     if not path.exists():
         raise LookupError(f"config not found: {path}")
-    raw: object = json.loads(path.read_text())
+    try:
+        return _parse(json.loads(path.read_text()))
+    except ValueError as error:
+        raise ValueError(f"{path}: {error}") from error
+
+
+def _parse(raw: object) -> RouterConfig:
     root = _mapping(raw, "config")
     agents_raw = _mapping(root.get("agents"), "agents")
     agents = {name: _agent(name, value) for name, value in agents_raw.items()}
@@ -33,6 +40,9 @@ def load_config(path: Path) -> RouterConfig:
     for name in order:
         if name not in agents:
             raise ValueError(f"order names unknown agent: {name}")
+    for name, agent in agents.items():
+        if agent.enabled and name not in order:
+            raise ValueError(f"agent {name} is enabled but not listed in order")
     git_policy = _string(root.get("git_policy"), "git_policy")
     if git_policy not in GIT_POLICIES:
         raise ValueError(f"git_policy must be one of {GIT_POLICIES}")
@@ -49,7 +59,9 @@ def load_config(path: Path) -> RouterConfig:
         limits=_limits(root.get("limits")),
         host_fallback=host_fallback,
         git_policy=git_policy,
-        token_error_patterns=_strings(root.get("token_error_patterns"), "token_error_patterns"),
+        host_session_env_prefixes=_strings(
+            root.get("host_session_env_prefixes"), "host_session_env_prefixes"
+        ),
     )
 
 
@@ -64,7 +76,6 @@ def _agent(name: str, value: object) -> AgentConfig:
         tier: _string(model, f"agents.{name}.tiers.{tier}")
         for tier, model in _mapping(raw.get("tiers", {}), f"agents.{name}.tiers").items()
     }
-    add_dir_flag = raw.get("add_dir_flag")
     agent = AgentConfig(
         name=name,
         enabled=enabled,
@@ -72,10 +83,16 @@ def _agent(name: str, value: object) -> AgentConfig:
         allowed_models=allowed,
         efforts=_strings(raw.get("efforts", []), f"agents.{name}.efforts"),
         tiers=tiers,
-        add_dir_flag=add_dir_flag if isinstance(add_dir_flag, str) else None,
+        add_dir_flag=_optional_string(raw.get("add_dir_flag"), f"agents.{name}.add_dir_flag"),
         optional_dirs=_strings(raw.get("optional_dirs", []), f"agents.{name}.optional_dirs"),
         unset_env_prefixes=_strings(
             raw.get("unset_env_prefixes", []), f"agents.{name}.unset_env_prefixes"
+        ),
+        token_error_patterns=_patterns(
+            raw.get("token_error_patterns", []), f"agents.{name}.token_error_patterns"
+        ),
+        guard_env_file_var=_optional_string(
+            raw.get("guard_env_file_var"), f"agents.{name}.guard_env_file_var"
         ),
     )
     if enabled:
@@ -120,6 +137,20 @@ def _strings(value: object, field: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValueError(f"{field} must be a list of strings")
     return tuple(str(item) for item in value)
+
+
+def _patterns(value: object, field: str) -> tuple[str, ...]:
+    patterns = _strings(value, field)
+    for pattern in patterns:
+        try:
+            re.compile(pattern)
+        except re.error as error:
+            raise ValueError(f"{field} has an invalid regex {pattern!r}: {error}") from error
+    return patterns
+
+
+def _optional_string(value: object, field: str) -> str | None:
+    return None if value is None else _string(value, field)
 
 
 def _string(value: object, field: str) -> str:

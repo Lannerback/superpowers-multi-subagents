@@ -4,25 +4,25 @@
   "git_policy": "no-commit",
   "limits": {
     "run_seconds": 2700,
-    "stall_seconds": 600,
+    "stall_seconds": 1200,
     "error_attempts": 3,
     "token_cooldown_seconds": 3600
   },
-  "token_error_patterns": [
-    "token.{0,40}(expired|exhausted|limit)",
-    "expired.{0,20}token",
-    "usage limit",
-    "rate limit",
-    "quota",
-    "unauthori[sz]ed",
-    "authentication",
-    "failed to authenticate",
-    "session expired",
-    "not logged in",
-    "model is not supported",
-    "requires a newer version",
-    "HTTP 401",
-    "HTTP 429"
+  "host_session_env_prefixes": [
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_MESSAGING_",
+    "CLAUDE_CODE_SESSION_",
+    "CLAUDE_CODE_HOST_",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_DESKTOP_",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_CODE_USER_EMAIL",
+    "CLAUDE_CODE_ACCOUNT_UUID",
+    "CLAUDE_CODE_ORGANIZATION_UUID",
+    "CLAUDE_ENV_FILE",
+    "CLAUDE_PID",
+    "CLAUDE_EFFORT"
   ],
   "agents": {
     "opencode": {
@@ -34,30 +34,85 @@
         "cheap": "agent-platform/anthropic/claude-sonnet-5-5",
         "standard": "agent-platform/anthropic/claude-sonnet-5-5",
         "capable": "agent-platform/anthropic/claude-opus-5-5"
-      }
+      },
+      "token_error_patterns": [
+        "Model unavailable",
+        "ProviderModelNotFoundError",
+        "ProviderAuthError",
+        "API key is missing",
+        "token refresh failed",
+        "\\bHTTP 401\\b",
+        "insufficient_quota",
+        "usage_limit_reached",
+        "rate_limit",
+        "rate limited",
+        "\\b(status|HTTP|Error)\\b[^\\n]{0,40}\\b429\\b"
+      ]
     },
     "codex": {
       "enabled": true,
-      "command": ["codex", "exec", "--skip-git-repo-check", "-C", "{cwd}", "-s", "workspace-write", "--add-dir", "{workspace}", "-c", "sandbox_workspace_write.network_access=true", "-m", "{model}", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"],
+      "command": ["codex", "exec", "--skip-git-repo-check", "-C", "{cwd}", "-s", "workspace-write", "--add-dir", "{workspace}", "-c", "allow_login_shell=false", "-c", "sandbox_workspace_write.network_access=true", "-m", "{model}", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"],
       "models": "all",
       "efforts": ["low", "medium", "high", "xhigh", "max"],
       "tiers": { "cheap": "gpt-5.6-luna", "standard": "gpt-5.6-terra", "capable": "gpt-5.6-sol" },
       "add_dir_flag": "--add-dir",
-      "optional_dirs": ["~/.cache/uv", "~/.pub-cache"]
+      "optional_dirs": ["~/.cache/uv", "~/.pub-cache"],
+      "token_error_patterns": [
+        "not supported when using Codex",
+        "requires a newer version",
+        "Not logged in",
+        "access token could not be refreshed",
+        "unexpected status 401",
+        "hit your usage limit",
+        "usage_limit_reached",
+        "insufficient_quota",
+        "rate_limit",
+        "\\b(status|HTTP|Error)\\b[^\\n]{0,40}\\b429\\b"
+      ]
     },
     "claude": {
       "enabled": true,
-      "command": ["claude", "-p", "{prompt}", "--model", "{model}", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash,Read,Edit,Write,Grep,Glob", "--add-dir", "{workspace}"],
+      "command": ["claude", "-p", "{prompt}", "--output-format", "stream-json", "--verbose", "--model", "{model}", "--effort", "{effort}", "--permission-mode", "acceptEdits", "--allowedTools", "Bash,Read,Edit,Write,Grep,Glob", "--add-dir", "{workspace}"],
       "models": "all",
       "efforts": ["low", "medium", "high", "xhigh", "max"],
       "tiers": { "cheap": "haiku", "standard": "sonnet", "capable": "opus" },
-      "unset_env_prefixes": ["CLAUDE"]
+      "unset_env_prefixes": [
+        "CLAUDE_AGENT_SDK_",
+        "CLAUDE_CODE_SDK_",
+        "CLAUDE_CODE_EMIT_",
+        "CLAUDE_CODE_SIMPLE",
+        "CLAUDE_CODE_EAGER_FLUSH",
+        "CLAUDE_CODE_TERMINAL_MCP_TOOLS",
+        "CLAUDE_CODE_STARTUP_FAILURE_RESULTS",
+        "CLAUDE_CODE_REPORT_FINDINGS",
+        "CLAUDE_CODE_ENABLE_ASK_USER_QUESTION_TOOL",
+        "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING",
+        "CLAUDE_CODE_DISABLE_CRON",
+        "CLAUDE_CODE_DISABLE_TERMINAL_TITLE",
+        "CLAUDE_PREVIEW_"
+      ],
+      "guard_env_file_var": "CLAUDE_ENV_FILE",
+      "token_error_patterns": [
+        "Failed to authenticate",
+        "OAuth session expired",
+        "Not logged in",
+        "Invalid API key",
+        "issue with the selected model",
+        "requires a newer version",
+        "hit your [a-z ]{0,20}limit",
+        "usage limit reached",
+        "usage_limit_reached",
+        "rate_limit",
+        "\"api_error_status\":\\s*(401|403|429)",
+        "\\b(status|HTTP|Error)\\b[^\\n]{0,40}\\b429\\b"
+      ]
     },
     "cursor": {
       "enabled": false,
       "command": ["cursor-agent", "-p", "--force", "--output-format", "text", "--model", "{model}", "{prompt}"],
       "models": "all",
-      "tiers": { "cheap": "sonnet-4", "standard": "sonnet-4", "capable": "gpt-5" }
+      "tiers": { "cheap": "sonnet-4", "standard": "sonnet-4", "capable": "gpt-5" },
+      "token_error_patterns": ["Authentication required", "usage_limit_reached", "rate_limit", "\\b(status|HTTP|Error)\\b[^\\n]{0,40}\\b429\\b"]
     },
     "alter": { "enabled": false }
   }

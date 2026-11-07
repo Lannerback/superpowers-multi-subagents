@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,13 +36,13 @@ def check_agents(
         if path is None:
             results.append(CheckResult(name, False, f"{agent.command[0]} not on PATH"))
         elif smoke:
-            results.append(_smoke(agent))
+            results.append(_smoke(agent, config.host_session_env_prefixes))
         else:
             results.append(CheckResult(name, True, path))
     return results
 
 
-def _smoke(agent: AgentConfig) -> CheckResult:
+def _smoke(agent: AgentConfig, host_session_prefixes: Sequence[str]) -> CheckResult:
     workdir = Path(tempfile.mkdtemp())
     model = agent.tiers["cheap"]
     argv = render_command(
@@ -52,8 +52,7 @@ def _smoke(agent: AgentConfig) -> CheckResult:
         Path.home(),
     )
     log = workdir / "smoke.log"
-    outcome = ProcessRunner().run(
-        argv, workdir, build_env(agent, os.environ, {}, None), log, (), _SMOKE_SECONDS, _SMOKE_SECONDS
-    )
+    env = build_env(agent, os.environ, {}, None, host_session_prefixes)
+    outcome = ProcessRunner().run(argv, workdir, env, log, (), _SMOKE_SECONDS, _SMOKE_SECONDS)
     ok = outcome.returncode == 0 and "ok" in log.read_text(errors="replace").lower()
     return CheckResult(agent.name, ok, f"{model}: {outcome.reason} rc={outcome.returncode} log={log}")

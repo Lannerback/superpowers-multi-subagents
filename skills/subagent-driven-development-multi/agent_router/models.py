@@ -8,6 +8,7 @@ EFFORTS = ("low", "medium", "high", "xhigh", "max")
 TIERS = ("cheap", "standard", "capable")
 GIT_POLICIES = ("no-commit", "allow")
 HOST_FALLBACKS = ("subagent", "block")
+OTHER_HOST = "other"
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,8 @@ class AgentConfig:
     add_dir_flag: str | None
     optional_dirs: tuple[str, ...]
     unset_env_prefixes: tuple[str, ...]
+    token_error_patterns: tuple[str, ...]
+    guard_env_file_var: str | None
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,7 @@ class RouterConfig:
     limits: Limits
     host_fallback: Mapping[str, str]
     git_policy: str
-    token_error_patterns: tuple[str, ...]
+    host_session_env_prefixes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -61,3 +64,5 @@ class DispatchResult:
     model: str
     exit_code: int
     log: Path | None
+    note: str = ""
+    host_prompt: Path | None = None

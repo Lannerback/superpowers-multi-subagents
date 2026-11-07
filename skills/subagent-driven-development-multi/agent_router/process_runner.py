@@ -7,6 +7,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import FrameType
 
 _KILL_GRACE_SECONDS = 5
 
@@ -15,6 +16,19 @@ _KILL_GRACE_SECONDS = 5
 class RunOutcome:
     returncode: int
     reason: str
+
+
+def raise_on_termination_signals() -> None:
+    """Turn SIGTERM and SIGHUP into SystemExit, so the runner's cleanup runs."""
+    signal.signal(signal.SIGTERM, _exit_on_signal)
+    signal.signal(signal.SIGHUP, _exit_on_signal)
+
+
+def _exit_on_signal(signum: int, _frame: FrameType | None) -> None:
+    # Ignore repeats, so a second signal cannot interrupt the worker's cleanup.
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    raise SystemExit(128 + signum)
 
 
 class ProcessRunner:
@@ -38,10 +52,14 @@ class ProcessRunner:
                     list(argv), cwd=cwd, env=dict(env), stdin=subprocess.DEVNULL,
                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
                 )
-            except FileNotFoundError:
-                log.write(f"command not found: {argv[0]}\n".encode())
+            except (FileNotFoundError, PermissionError) as error:
+                log.write(f"command not runnable: {argv[0]}: {error}\n".encode())
                 return RunOutcome(127, "not_found")
-            return self._supervise(process, log_path, watch, run_seconds, stall_seconds)
+            try:
+                return self._supervise(process, log_path, watch, run_seconds, stall_seconds)
+            finally:
+                if process.poll() is None:
+                    self._terminate(process)
 
     def _supervise(
         self,
@@ -68,9 +86,16 @@ class ProcessRunner:
         return RunOutcome(process.returncode, "exited")
 
     def _terminate(self, process: subprocess.Popen[bytes]) -> None:
-        os.killpg(process.pid, signal.SIGTERM)
+        self._signal_group(process, signal.SIGTERM)
         try:
             process.wait(timeout=_KILL_GRACE_SECONDS)
         except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
+            self._signal_group(process, signal.SIGKILL)
             process.wait()
+
+    def _signal_group(self, process: subprocess.Popen[bytes], signum: signal.Signals) -> None:
+        # A worker that just exited has no group left. macOS reports a zombie as PermissionError.
+        try:
+            os.killpg(process.pid, signum)
+        except (ProcessLookupError, PermissionError):
+            pass

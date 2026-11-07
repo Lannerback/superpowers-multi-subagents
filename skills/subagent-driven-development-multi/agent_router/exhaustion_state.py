@@ -23,7 +23,10 @@ class ExhaustionState:
     def _read(self) -> dict[str, float]:
         if not self._path.exists():
             return {}
-        raw: object = json.loads(self._path.read_text())
-        if not isinstance(raw, dict):
-            raise ValueError(f"invalid state file: {self._path}")
-        return {str(key): float(value) for key, value in raw.items()}
+        try:
+            raw: object = json.loads(self._path.read_text())
+            if not isinstance(raw, dict):
+                raise ValueError("expected an object")
+            return {str(key): float(value) for key, value in raw.items()}
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"invalid state file: {self._path}: {error}") from error

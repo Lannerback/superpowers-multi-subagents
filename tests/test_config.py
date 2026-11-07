@@ -60,6 +60,39 @@ class ValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "alter"):
             load_config(self._write(data))
 
+    def test_enabled_agent_missing_from_order_is_rejected(self) -> None:
+        data = self._base()
+        data["order"] = ["opencode", "codex", "cursor", "alter"]
+        with self.assertRaisesRegex(ValueError, "claude"):
+            load_config(self._write(data))
+
+    def test_disabled_agent_may_be_missing_from_order(self) -> None:
+        data = self._base()
+        data["order"] = ["opencode", "codex", "claude"]
+        self.assertEqual(load_config(self._write(data)).order, ("opencode", "codex", "claude"))
+
+    def test_non_string_add_dir_flag_is_rejected(self) -> None:
+        data = self._base()
+        data["agents"]["codex"]["add_dir_flag"] = 5  # type: ignore[index]
+        with self.assertRaisesRegex(ValueError, "add_dir_flag"):
+            load_config(self._write(data))
+
+    def test_invalid_token_pattern_is_rejected(self) -> None:
+        data = self._base()
+        data["agents"]["codex"]["token_error_patterns"] = ["("]  # type: ignore[index]
+        with self.assertRaisesRegex(ValueError, "regex"):
+            load_config(self._write(data))
+
+    def test_errors_name_the_config_path(self) -> None:
+        data = self._base()
+        data["order"] = "x"
+        path = self._write(data)
+        with self.assertRaisesRegex(ValueError, str(path)):
+            load_config(path)
+        path.write_text("{broken")
+        with self.assertRaisesRegex(ValueError, str(path)):
+            load_config(path)
+
     def test_missing_file_raises_lookup_error(self) -> None:
         with self.assertRaises(LookupError):
             load_config(Path("/nonexistent/agents.json"))

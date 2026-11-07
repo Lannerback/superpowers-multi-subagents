@@ -4,10 +4,12 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
+from agent_router.process_runner import RunOutcome
+
 _STATUS = re.compile(
     r"^\**Status:\**\s*(DONE_WITH_CONCERNS|DONE|BLOCKED|NEEDS_CONTEXT|APPROVED|CHANGES_REQUIRED)\**\s*$"
 )
-_LOG_TAIL_BYTES = 8192
+_LOG_TAIL_BYTES = 2048
 
 
 def read_report_status(report: Path, started_at: float) -> str | None:
@@ -21,8 +23,9 @@ def read_report_status(report: Path, started_at: float) -> str | None:
     return match.group(1) if match else None
 
 
-def is_token_error(log: Path, patterns: Sequence[str]) -> bool:
-    if not log.exists():
+def is_token_error(outcome: RunOutcome, log: Path, patterns: Sequence[str]) -> bool:
+    """Only a CLI that quit with an error can be out of tokens: logs also hold what the agent read."""
+    if outcome.reason != "exited" or outcome.returncode == 0 or not log.exists():
         return False
     data = log.read_bytes()[-_LOG_TAIL_BYTES:].decode(errors="replace")
     return any(re.search(pattern, data, re.IGNORECASE) for pattern in patterns)
