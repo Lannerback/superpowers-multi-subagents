@@ -13,9 +13,9 @@ Both defer to upstream, so superpowers updates keep reaching you. Upstream's led
 
 1. The session you launch from coordinates. It never implements, unless a task says so.
 2. For each dispatch, the router walks `order` in the config, skipping disabled agents and the agent you are running in.
-3. A token or quota error moves to the next agent at once, and that agent is skipped until its cooldown ends. Other errors get three attempts.
+3. If an agent's CLI quits with an error that matches its `token_error_patterns`, such as a login or quota failure, the router moves to the next agent at once and skips that agent until its cooldown ends. Other failures get three attempts.
 4. A run succeeds only if the agent exits 0 and the report file ends with a `Status:` line.
-5. If every agent fails, the session uses its own subagents, or stops if `host_fallback` says so.
+5. If every agent fails, the session uses its own subagents, or stops if `host_fallback` says so. Bad input, such as a wrong `--cwd`, prints `Status: ERROR` and exits 2. It never falls back.
 6. Every attempt is an `Agent-run` line in the plan's ledger, `.superpowers/sdd/<plan>/progress.md`.
 
 ## Requirements
@@ -32,8 +32,8 @@ Both defer to upstream, so superpowers updates keep reaching you. Upstream's led
 |---|---|
 | Claude Code | `claude plugin marketplace add obra/superpowers-marketplace`, then `claude plugin install superpowers@superpowers-marketplace` |
 | Codex | `codex plugin marketplace add obra/superpowers`, then `codex plugin add superpowers@superpowers-dev` |
-| OpenCode | Add `"plugins": ["superpowers@git+https://github.com/obra/superpowers.git"]` to `~/.config/opencode/opencode.json` |
-| Cursor | In Agent chat: `/add-plugin superpowers`. Optional if Claude or Codex has superpowers, because the skills then read those files directly |
+| OpenCode | Add `"plugins": ["superpowers@git+https://github.com/obra/superpowers.git"]` to `~/.config/opencode/opencode.json`. The router finds it in `~/.cache/opencode` after OpenCode has loaded the plugin. If not, set `SUPERPOWERS_SKILLS_DIR` to its `skills` folder |
+| Cursor | In Agent chat: `/add-plugin superpowers`. The router does not look in Cursor's own plugin folder, so if Claude, Codex or OpenCode has no copy, also set `SUPERPOWERS_SKILLS_DIR` to a `skills` folder |
 | Others | See upstream's README, then set `SUPERPOWERS_SKILLS_DIR` to its `skills` folder |
 
 Claude's official marketplace can lag: it was at 7.0.0 when upstream was at 7.0.2.
@@ -69,13 +69,15 @@ skills/subagent-driven-development-multi/scripts/agent-router doctor --host clau
 
 ## Agent support
 
+This table states what was actually run, on macOS only. No complete plan has yet run through implementer, review, fix and final review on any agent, and the host-subagent fallback has not run in a real session. Only effort `low` ran on real CLIs.
+
 | Agent | As launcher | As worker |
 |---|---|---|
-| Claude Code | **Not tested.** The `claude` CLI was logged out during verification, so skill discovery could not be checked | **Not tested.** Blocked by login. The router records a logged-out `claude` as `token_error` on the first attempt and moves on |
-| Codex | Tested | Tested |
-| OpenCode | Tested | Tested |
-| Cursor | **Not fully tested.** Installed through `~/.agents/skills`. `host_fallback` is unset, so exhaustion blocks | **Untested.** Disabled by default |
-| Others | Works if it loads `SKILL.md` and can run shell commands | Add a command template |
+| Claude Code | **Discovery not checked.** The CLI was logged out, so no session could confirm it sees the skills. `doctor` and `--host claude` routing ran from another session | **No real model run.** Logged out, it is recorded as `token_error` on the first attempt, with no retries. CLI 2.1.301 was also run against a local mock API, which proved the git guard denies `git clean` |
+| Codex | Skill discovery question, and `doctor --smoke` | `doctor --smoke`, and one real dispatch that wrote a file. Git guard proven on CLI 0.146 with a local mock API and `codex sandbox` |
+| OpenCode | Skill discovery question, and `doctor --smoke` | `doctor --smoke`, and real dispatches that wrote files. Git guard denials seen on real runs |
+| Cursor | **Discovery not checked.** The CLI asked for authentication. Installed through `~/.agents/skills`. `--host cursor` routing ran. `host_fallback` is unset, so exhaustion blocks | **Never run.** Disabled by default |
+| Others | Not run. It should work if it loads `SKILL.md` and can run shell commands | Not run. Add a command template |
 
 ## Config
 
@@ -83,20 +85,22 @@ skills/subagent-driven-development-multi/scripts/agent-router doctor --host clau
 
 | Key | Meaning |
 |---|---|
-| `order` | Dispatch order. The launching agent is removed automatically |
+| `order` | Dispatch order. The launching agent is removed automatically. Every enabled agent must be listed |
 | `host_fallback` | `subagent` uses the launcher's own subagents when all fail. Unlisted hosts block |
-| `git_policy` | `no-commit` puts a git guard on external agents' `PATH`. `allow` uses upstream's commit flow |
-| `limits` | Run time, stall time, attempts per agent, token cooldown |
-| `token_error_patterns` | Regexes checked against the end of a failed run's log |
+| `git_policy` | `no-commit` gives external agents a best-effort git guard, tells them not to commit, and blocks a dispatch that changes HEAD or the index. `allow` uses upstream's commit flow |
+| `limits` | Run time, stall time, attempts per agent, token cooldown. A run counts as stalled when its log, the ledger and the report file all stop growing |
+| `host_session_env_prefixes` | Variables of the launching session, removed for every worker |
 | `agents.<name>.enabled` | Whether the agent can be used |
 | `agents.<name>.command` | Command template. Placeholders: `{model}`, `{effort}`, `{cwd}`, `{workspace}`, `{title}`, `{prompt}` |
 | `agents.<name>.models` | Allowed models, or `"all"` |
 | `agents.<name>.efforts` | Supported efforts. An unsupported effort skips the agent |
 | `agents.<name>.tiers` | Model for `cheap`, `standard`, `capable` |
 | `agents.<name>.add_dir_flag`, `optional_dirs` | Extra writable folders, added if they exist |
-| `agents.<name>.unset_env_prefixes` | Environment variables removed for this agent |
+| `agents.<name>.unset_env_prefixes` | Further variables removed for this agent, such as Claude's nesting markers |
+| `agents.<name>.token_error_patterns` | Regexes for this CLI's own login, model and quota messages. Checked only when it exits non-zero, against the end of its log |
+| `agents.<name>.guard_env_file_var` | For a CLI that sources a file before each tool call: the variable naming that file, so it can reapply the git guard |
 
-To add an agent, add an entry with a command template. No code change is needed. An enabled agent needs a `command` and all three tiers.
+To add an agent, add an entry with a command template and list its name in `order`. No code change is needed. An enabled agent needs a `command` and all three tiers, and one missing from `order` is rejected at load. Without `token_error_patterns`, its token failures get the normal three attempts and no cooldown.
 
 Per-plan environment variables go in `<workspace>/agent-env.json`, as a JSON object. Do not put secrets there.
 
@@ -111,10 +115,12 @@ skills/subagent-driven-development-multi/scripts/agent-router upstream-check --a
 ## Risks
 
 - **Permissions.** Workers run unattended with write access: `opencode --auto`, `codex -s workspace-write` with network on, `claude --permission-mode acceptEdits` with Bash allowed. Run them only on code you are willing to have changed.
-- **The git guard stops mistakes, not hostile agents.** An agent can still call git by its full path.
+- **The git guard is best-effort.** It is a `git` wrapper on `PATH`, so it stops mistakes, not hostile agents: a full path, an alias, or a shell that rebuilds `PATH` gets past it. It was proven only on macOS, on OpenCode, on Codex 0.146 with `allow_login_shell=false`, and on Claude Code 2.1.301 against a mock API. Other versions and Linux are unproven. The router's check catches a changed HEAD or index after the run, but not `git clean` or a stash of unstaged work. Host subagents have no guard, only the written rule.
+- **Workers can read your environment.** The launching session's variables are removed, using `host_session_env_prefixes`. Everything else stays, including provider API keys such as `ANTHROPIC_API_KEY`, because an agent may need its own. Every enabled worker can read them.
 - **Your code goes to each enabled provider.** Check this is allowed for your project.
 - **Token errors are detected by matching text**, and can change with CLI versions. Misdetection wastes attempts or skips a healthy agent.
-- **A failed run can leave partial edits.** The next agent is told to inspect them.
+- **A failed run can leave partial edits.** The next agent, including a host subagent, is told to inspect them.
+- **Stopping the router.** SIGTERM, SIGHUP and Ctrl-C take the worker down. SIGKILL cannot, so a worker can outlive it.
 
 ## Development
 
