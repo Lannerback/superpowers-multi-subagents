@@ -71,7 +71,7 @@ skills/subagent-driven-development-multi/scripts/agent-router doctor --host clau
 
 | Agent | As launcher | As worker |
 |---|---|---|
-| Claude Code | Tested | Tested |
+| Claude Code | **Not tested.** The `claude` CLI was logged out during verification, so skill discovery could not be checked | **Not tested.** Blocked by login. The router records a logged-out `claude` as `token_error` on the first attempt and moves on |
 | Codex | Tested | Tested |
 | OpenCode | Tested | Tested |
 | Cursor | **Not fully tested.** Installed through `~/.agents/skills`. `host_fallback` is unset, so exhaustion blocks | **Untested.** Disabled by default |
