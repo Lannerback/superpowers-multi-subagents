@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -53,6 +54,7 @@ class RouterTest(unittest.TestCase):
         policy: str = "allow",
         guard_dir: Path | None = None,
         stall: int = 30,
+        which=shutil.which,
     ):
         config = RouterConfig(
             order=tuple(self.agents), agents=self.agents,
@@ -64,7 +66,7 @@ class RouterTest(unittest.TestCase):
             config, ProcessRunner(poll_seconds=0.02),
             ExhaustionState(self.ws / "router-state.json", lambda: 100.0),
             Ledger(self.ws / "progress.md", lambda: 0.0),
-            guard_dir=guard_dir, home=self.dir, environ=dict(os.environ),
+            guard_dir=guard_dir, home=self.dir, environ=dict(os.environ), which=which,
         )
         return router.dispatch(DispatchRequest(
             host=host, role="implementer", task="1", tier="cheap", effort="low",
@@ -87,6 +89,15 @@ class RouterTest(unittest.TestCase):
         self._agent("b", OK)
         self.assertEqual(self._dispatch(host="claude").runner, "b")
         self.assertEqual(self._calls("claude"), 0)
+
+    def test_uninstalled_agent_is_skipped_and_recorded_once(self) -> None:
+        self._agent("a", OK)
+        self._agent("b", OK)
+        missing = str(self.dir / "a")
+        result = self._dispatch(which=lambda command: None if command == missing else command)
+        self.assertEqual(result.runner, "b")
+        self.assertEqual(self._calls("a"), 0)
+        self.assertEqual(self._ledger().count("runner=a model=a-m effort=low attempt=0 result=not_installed"), 1)
 
     def test_disabled_agent_is_skipped(self) -> None:
         self._agent("a", OK, enabled=False)

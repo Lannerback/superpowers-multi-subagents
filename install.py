@@ -13,6 +13,25 @@ HOST_TARGETS = {
 }
 
 
+HOST_CONFIG_DIRS = {
+    "claude": ".claude",
+    "codex": ".codex",
+    "opencode": ".config/opencode",
+    "cursor": ".cursor",
+}
+AUTO = "auto"
+
+
+def resolve_hosts(requested: list[str], home: Path, force: bool) -> tuple[list[str], list[str]]:
+    """Split requested hosts into installed ones and skipped ones, by their config folder."""
+    names = list(HOST_CONFIG_DIRS) if AUTO in requested else requested
+    present = [name for name in names if (home / HOST_CONFIG_DIRS[name]).is_dir()]
+    if AUTO in requested:
+        return present, []
+    selected = names if force else present
+    return selected, [name for name in names if name not in selected]
+
+
 def install(skills_root: Path, target: Path) -> list[str]:
     target.mkdir(parents=True, exist_ok=True)
     linked = []
@@ -43,15 +62,22 @@ def _skills(skills_root: Path) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", nargs="*", default=[], choices=sorted(HOST_TARGETS))
+    parser.add_argument("--host", nargs="*", default=[], choices=[AUTO, *sorted(HOST_TARGETS)])
+    parser.add_argument(
+        "--force-host", action="store_true",
+        help="create the skills folder even when the agent's config folder does not exist",
+    )
     parser.add_argument("--target", help="skills folder for any other agent")
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args()
-    targets = [Path.home() / HOST_TARGETS[host] for host in args.host]
+    hosts, skipped = resolve_hosts(args.host, Path.home(), args.force_host)
+    for host in skipped:
+        print(f"skipped {host}: ~/{HOST_CONFIG_DIRS[host]} not found (use --force-host to install anyway)")
+    targets = list(dict.fromkeys(Path.home() / HOST_TARGETS[host] for host in hosts))
     if args.target:
         targets.append(Path(args.target).expanduser())
     if not targets:
-        parser.error("pass --host or --target")
+        parser.error("nothing to install: no agent config folder found. Use --host with --force-host, or --target")
     skills_root = Path(__file__).resolve().parent / "skills"
     action = uninstall if args.uninstall else install
     for target in targets:

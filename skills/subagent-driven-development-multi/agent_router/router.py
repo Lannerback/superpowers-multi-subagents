@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import shlex
+import shutil
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from agent_router.command_builder import build_env, render_command
@@ -33,8 +34,10 @@ class AgentRouter:
         guard_dir: Path | None,
         home: Path,
         environ: Mapping[str, str],
+        which: Callable[[str], str | None] = shutil.which,
     ) -> None:
         self._config = config
+        self._which = which
         self._runner = runner
         self._state = state
         self._ledger = ledger
@@ -44,7 +47,7 @@ class AgentRouter:
         self._failed_before = False
 
     def dispatch(self, request: DispatchRequest) -> DispatchResult:
-        for agent in self._candidates(request.host):
+        for agent in self._candidates(request):
             result = self._try_agent(agent, request)
             if result is not None:
                 return result
@@ -55,9 +58,16 @@ class AgentRouter:
             )
         return DispatchResult("BLOCKED", "none", "none", EXIT_BLOCKED, None)
 
-    def _candidates(self, host: str) -> list[AgentConfig]:
-        agents = (self._config.agents[name] for name in self._config.order if name != host)
-        return [a for a in agents if a.enabled and not self._state.is_exhausted(a.name)]
+    def _candidates(self, request: DispatchRequest) -> list[AgentConfig]:
+        agents = (self._config.agents[name] for name in self._config.order if name != request.host)
+        usable = (a for a in agents if a.enabled and not self._state.is_exhausted(a.name))
+        return [agent for agent in usable if self._is_installed(agent, request)]
+
+    def _is_installed(self, agent: AgentConfig, request: DispatchRequest) -> bool:
+        if self._which(agent.command[0]) is not None:
+            return True
+        self._ledger.record(request, agent.name, agent.tiers[request.tier], 0, "not_installed")
+        return False
 
     def _try_agent(self, agent: AgentConfig, request: DispatchRequest) -> DispatchResult | None:
         model = agent.tiers[request.tier]

@@ -1,5 +1,5 @@
 {
-  "order": ["opencode", "codex", "claude", "cursor", "alter"],
+  "order": ["opencode", "codex", "claude", "cursor", "aider"],
   "host_fallback": { "claude": "subagent", "codex": "subagent", "opencode": "subagent" },
   "git_policy": "no-commit",
   "limits": {
@@ -114,6 +114,6 @@
       "tiers": { "cheap": "sonnet-4", "standard": "sonnet-4", "capable": "gpt-5" },
       "token_error_patterns": ["Authentication required", "usage_limit_reached", "rate_limit", "\\b(status|HTTP|Error)\\b[^\\n]{0,40}\\b429\\b"]
     },
-    "alter": { "enabled": false }
+    "aider": { "enabled": false }
   }
 }

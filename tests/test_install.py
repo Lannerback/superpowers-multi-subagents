@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from install import HOST_TARGETS, install, uninstall  # noqa: E402
+from install import HOST_TARGETS, install, resolve_hosts, uninstall  # noqa: E402
 
 
 class InstallTest(unittest.TestCase):
@@ -47,3 +47,28 @@ class InstallTest(unittest.TestCase):
         (self.skills / "notes").mkdir()
         install(self.skills, self.target)
         self.assertFalse((self.target / "notes").exists())
+
+
+class ResolveHostsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.home = Path(tempfile.mkdtemp())
+        (self.home / ".claude").mkdir()
+        (self.home / ".config/opencode").mkdir(parents=True)
+
+    def test_named_host_without_config_folder_is_skipped(self) -> None:
+        selected, skipped = resolve_hosts(["claude", "codex"], self.home, force=False)
+        self.assertEqual(selected, ["claude"])
+        self.assertEqual(skipped, ["codex"])
+
+    def test_auto_picks_only_hosts_with_a_config_folder(self) -> None:
+        selected, skipped = resolve_hosts(["auto"], self.home, force=False)
+        self.assertEqual(selected, ["claude", "opencode"])
+        self.assertEqual(skipped, [])
+
+    def test_force_keeps_a_host_without_config_folder(self) -> None:
+        selected, skipped = resolve_hosts(["codex"], self.home, force=True)
+        self.assertEqual((selected, skipped), (["codex"], []))
+
+    def test_force_does_not_widen_auto(self) -> None:
+        selected, _ = resolve_hosts(["auto"], self.home, force=True)
+        self.assertEqual(selected, ["claude", "opencode"])

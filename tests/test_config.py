@@ -21,7 +21,7 @@ class ShippedConfigTest(unittest.TestCase):
 
     def test_cursor_and_alter_are_listed_disabled(self) -> None:
         self.assertFalse(self.config.agents["cursor"].enabled)
-        self.assertFalse(self.config.agents["alter"].enabled)
+        self.assertFalse(self.config.agents["aider"].enabled)
 
     def test_opencode_is_limited_to_sonnet_and_opus_with_all_efforts(self) -> None:
         agent = self.config.agents["opencode"]
@@ -56,13 +56,13 @@ class ValidationTest(unittest.TestCase):
 
     def test_enabled_agent_without_command_is_rejected(self) -> None:
         data = self._base()
-        data["agents"]["alter"]["enabled"] = True  # type: ignore[index]
-        with self.assertRaisesRegex(ValueError, "alter"):
+        data["agents"]["aider"]["enabled"] = True  # type: ignore[index]
+        with self.assertRaisesRegex(ValueError, "aider"):
             load_config(self._write(data))
 
     def test_enabled_agent_missing_from_order_is_rejected(self) -> None:
         data = self._base()
-        data["order"] = ["opencode", "codex", "cursor", "alter"]
+        data["order"] = ["opencode", "codex", "cursor", "aider"]
         with self.assertRaisesRegex(ValueError, "claude"):
             load_config(self._write(data))
 
