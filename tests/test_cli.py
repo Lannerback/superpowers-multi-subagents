@@ -163,6 +163,25 @@ class SignalTest(CliCase):
         self._orphan_check(signal.SIGHUP, 128 + signal.SIGHUP)
 
 
+    def test_sigint_takes_the_worker_down(self) -> None:
+        self._orphan_check(signal.SIGINT, 128 + signal.SIGINT)
+
+    def test_nohup_keeps_the_run_alive_through_sighup(self) -> None:
+        started = self.home / "started"
+        self._config(f'touch "{started}"\nsleep 2\necho "Status: DONE" > "$REPORT"')
+        process = subprocess.Popen(
+            [str(ROUTER), *self._args()], cwd=self.home, env=self.env, stdout=subprocess.DEVNULL,
+            preexec_fn=lambda: signal.signal(signal.SIGHUP, signal.SIG_IGN),
+        )
+        deadline = time.monotonic() + 20
+        while not started.exists():
+            self.assertLess(time.monotonic(), deadline, "worker never started")
+            time.sleep(0.05)
+        process.send_signal(signal.SIGHUP)
+        self.assertEqual(process.wait(timeout=30), 0)
+        self.assertIn("result=ok", self._ledger())
+
+
 class ErrorBoundaryTest(CliCase):
     def _assert_error(self, result: subprocess.CompletedProcess[str], needle: str) -> None:
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)

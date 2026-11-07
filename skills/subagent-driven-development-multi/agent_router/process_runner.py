@@ -10,6 +10,7 @@ from pathlib import Path
 from types import FrameType
 
 _KILL_GRACE_SECONDS = 5
+_TERMINATION_SIGNALS = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
 
 
 @dataclass(frozen=True)
@@ -19,15 +20,17 @@ class RunOutcome:
 
 
 def raise_on_termination_signals() -> None:
-    """Turn SIGTERM and SIGHUP into SystemExit, so the runner's cleanup runs."""
-    signal.signal(signal.SIGTERM, _exit_on_signal)
-    signal.signal(signal.SIGHUP, _exit_on_signal)
+    """Turn termination signals into SystemExit, so the runner's cleanup runs."""
+    for signum in _TERMINATION_SIGNALS:
+        # An inherited ignore is deliberate: the skill starts long runs under nohup.
+        if signal.getsignal(signum) != signal.SIG_IGN:
+            signal.signal(signum, _exit_on_signal)
 
 
 def _exit_on_signal(signum: int, _frame: FrameType | None) -> None:
     # Ignore repeats, so a second signal cannot interrupt the worker's cleanup.
-    signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    for repeat in _TERMINATION_SIGNALS:
+        signal.signal(repeat, signal.SIG_IGN)
     raise SystemExit(128 + signum)
 
 
