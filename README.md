@@ -43,10 +43,10 @@ Claude's official marketplace can lag: it was at 7.0.0 when upstream was at 7.0.
 ```bash
 git clone https://github.com/Lannerback/superpowers-multi-subagents.git
 cd superpowers-multi-subagents
-./install.py --host claude codex opencode cursor
+./install.py --host auto
 ```
 
-Hosts: `claude`, `codex` and `cursor` (both use `~/.agents/skills`), `opencode`. For any other agent that loads `SKILL.md` folders:
+`auto` installs for every agent whose config folder exists and skips the others. Name agents instead to pick them: `--host claude codex opencode cursor` (`codex` and `cursor` share `~/.agents/skills`). An agent whose config folder is missing is skipped; `--force-host` installs anyway. For any other agent that loads `SKILL.md` folders:
 
 ```bash
 ./install.py --target ~/path/to/its/skills
@@ -87,7 +87,7 @@ This table states what was actually run, on macOS only. No complete plan has yet
 |---|---|
 | `order` | Dispatch order. The launching agent is removed automatically. Every enabled agent must be listed |
 | `host_fallback` | `subagent` uses the launcher's own subagents when all fail. Unlisted hosts block |
-| `git_policy` | `no-commit` gives external agents a best-effort git guard, tells them not to commit, and blocks a dispatch that changes HEAD or the index. `allow` uses upstream's commit flow |
+| `git_policy` | `commit-guarded`: workers may `git add <paths>` and `git commit`, every other history-changing command is denied unless the plan names it and you approve it. `no-commit`: workers may not stage or commit, and a dispatch that changes HEAD or the index is blocked. `allow`: no guard, upstream's commit flow. Details: [docs/git-policy.md](docs/git-policy.md) |
 | `limits` | Run time, stall time, attempts per agent, token cooldown. A run counts as stalled when its log, the ledger and the report file all stop growing |
 | `host_session_env_prefixes` | Variables of the launching session, removed for every worker |
 | `agents.<name>.enabled` | Whether the agent can be used |
@@ -103,6 +103,82 @@ This table states what was actually run, on macOS only. No complete plan has yet
 To add an agent, add an entry with a command template and list its name in `order`. No code change is needed. An enabled agent needs a `command` and all three tiers, and one missing from `order` is rejected at load. Without `token_error_patterns`, its token failures get the normal three attempts and no cooldown.
 
 Per-plan environment variables go in `<workspace>/agent-env.json`, as a JSON object. Do not put secrets there.
+
+### Examples
+
+Edit a copy at `~/.config/superpowers-multi-subagents/agents.json`. Comments below are for reading; JSON has none.
+
+**`order` and `host_fallback`.** The router tries agents left to right, never the one you launched from, and skips disabled or uninstalled ones. Launched from Claude Code, this config tries OpenCode, then Codex, and uses a Claude subagent if both fail. Launched from Cursor there is no `cursor` entry in `host_fallback`, so exhaustion blocks instead:
+
+```json
+{
+  "order": ["opencode", "codex", "claude"],
+  "host_fallback": { "claude": "subagent", "codex": "subagent", "opencode": "block" }
+}
+```
+
+**`git_policy`.** One of three strings:
+
+```json
+{ "git_policy": "commit-guarded" }
+```
+
+With `commit-guarded` a plan task can request one denied command: `**Git-allow:** push origin feature/x`. The executor asks you, and only after a yes passes `--git-grant "push origin feature/x"`.
+
+**`limits`.** All in seconds, except `error_attempts`:
+
+```json
+{
+  "limits": {
+    "run_seconds": 2700,
+    "stall_seconds": 1200,
+    "error_attempts": 3,
+    "token_cooldown_seconds": 3600
+  }
+}
+```
+
+A run is killed after 45 minutes (`run_seconds`), or after 20 minutes (`stall_seconds`) with no growth in its log, the ledger or the report file. A failing agent gets 3 attempts. An agent that reports a login or quota error is skipped for 1 hour (`token_cooldown_seconds`) and the next one is tried at once.
+
+**`host_session_env_prefixes`.** Variables of the session you launched from that must not leak into workers. Any variable whose name starts with one of these is removed:
+
+```json
+{ "host_session_env_prefixes": ["CLAUDECODE", "CLAUDE_CODE_SESSION_", "CLAUDE_ENV_FILE"] }
+```
+
+**An agent entry.** An example entry, based on the shipped Codex one. `{model}`, `{effort}`, `{cwd}`, `{workspace}`, `{title}` and `{prompt}` are replaced for each run:
+
+```json
+"codex": {
+  "enabled": true,
+  "command": ["codex", "exec", "-C", "{cwd}", "-s", "workspace-write", "--add-dir", "{workspace}",
+              "-m", "{model}", "-c", "model_reasoning_effort=\"{effort}\"", "{prompt}"],
+  "models": "all",
+  "efforts": ["low", "medium", "high"],
+  "tiers": { "cheap": "gpt-5.6-luna", "standard": "gpt-5.6-terra", "capable": "gpt-5.6-sol" },
+  "add_dir_flag": "--add-dir",
+  "optional_dirs": ["~/.cache/uv"],
+  "unset_env_prefixes": ["OPENAI_"],
+  "token_error_patterns": ["Not logged in", "usage_limit_reached", "rate_limit"]
+}
+```
+
+- `enabled`: `false` keeps the entry but never uses it. A disabled agent needs no other field, as `aider` in the shipped file.
+- `models`: `"all"`, or a list. OpenCode uses a list to allow only Sonnet and Opus.
+- `efforts`: a plan task asking for `max` skips this agent, because `max` is not listed. Leave it out to accept every effort.
+- `tiers`: a task with `tier=cheap` runs `gpt-5.6-luna`. All three tiers are required for an enabled agent.
+- `add_dir_flag` and `optional_dirs`: for each folder in the list that exists, `--add-dir <folder>` is added so the agent may write there. `~/` is your home folder.
+- `unset_env_prefixes`: variables removed for this agent only, here everything starting with `OPENAI_`.
+- `token_error_patterns`: case-insensitive regexes. They are tested against the last 2 KB of the log, only when the agent exited with an error. A match marks it exhausted for `token_cooldown_seconds`.
+- `guard_env_file_var`: for Claude Code, `"CLAUDE_ENV_FILE"`. The router writes a small script that puts the git guard first on `PATH` and gives its path in that variable, because Claude rebuilds `PATH` for each tool call and sources that file.
+
+**Per-plan variables.** If a plan's agents need an emulator host or similar, the plan writes `<workspace>/agent-env.json` and the router adds those variables to every worker of that plan:
+
+```json
+{ "ANDROID_SERIAL": "emulator-5554" }
+```
+
+More: [docs/](docs/README.md) explains every file, upstream, `install.py` and the git policy.
 
 ## Keeping up with superpowers
 

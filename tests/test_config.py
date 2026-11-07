@@ -15,6 +15,9 @@ class ShippedConfigTest(unittest.TestCase):
     def setUp(self) -> None:
         self.config = load_config(SHIPPED)
 
+    def test_shipped_policy_is_commit_guarded(self) -> None:
+        self.assertEqual(self.config.git_policy, "commit-guarded")
+
     def test_only_three_agents_are_enabled(self) -> None:
         enabled = {name for name, agent in self.config.agents.items() if agent.enabled}
         self.assertEqual(enabled, {"opencode", "codex", "claude"})

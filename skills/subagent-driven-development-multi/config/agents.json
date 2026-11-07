@@ -1,7 +1,7 @@
 {
   "order": ["opencode", "codex", "claude", "cursor", "aider"],
   "host_fallback": { "claude": "subagent", "codex": "subagent", "opencode": "subagent" },
-  "git_policy": "no-commit",
+  "git_policy": "commit-guarded",
   "limits": {
     "run_seconds": 2700,
     "stall_seconds": 1200,
