@@ -6,12 +6,15 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 
-_CANDIDATE_GLOBS = (
-    ".claude/plugins/cache/*/superpowers/*/skills",
-    ".codex/plugins/cache/*/superpowers/*/skills",
-    ".cache/opencode/npm/*/*/node_modules/superpowers/skills",
-    ".cache/opencode/packages/superpowers@*/*/*/*/node_modules/superpowers/skills",
-)
+HOST_GLOBS: dict[str, tuple[str, ...]] = {
+    "claude": (".claude/plugins/cache/*/superpowers/*/skills",),
+    "codex": (".codex/plugins/cache/*/superpowers/*/skills",),
+    "opencode": (
+        ".cache/opencode/npm/*/*/node_modules/superpowers/skills",
+        ".cache/opencode/packages/superpowers@*/*/*/*/node_modules/superpowers/skills",
+    ),
+}
+_CANDIDATE_GLOBS = tuple(pattern for patterns in HOST_GLOBS.values() for pattern in patterns)
 _SDD = "subagent-driven-development"
 WATCHED = (
     "writing-plans/SKILL.md",
@@ -34,15 +37,25 @@ def resolve_skills_dir(home: Path, environ: Mapping[str, str]) -> Path:
     override = environ.get("SUPERPOWERS_SKILLS_DIR")
     if override:
         return Path(override)
-    candidates = [
-        path
-        for pattern in _CANDIDATE_GLOBS
-        for path in home.glob(pattern)
-        if (path / "subagent-driven-development" / "SKILL.md").exists()
-    ]
+    candidates = _installed_dirs(home, _CANDIDATE_GLOBS)
     if not candidates:
         raise LookupError("superpowers not found: install it or set SUPERPOWERS_SKILLS_DIR")
     return max(candidates, key=_version_key)
+
+
+def host_skills_dirs(host: str, home: Path) -> list[Path]:
+    """Superpowers skills folders installed in one host's own plugin cache, newest first."""
+    found = _installed_dirs(home, HOST_GLOBS.get(host, ()))
+    return sorted(found, key=_version_key, reverse=True)
+
+
+def _installed_dirs(home: Path, patterns: tuple[str, ...]) -> list[Path]:
+    return [
+        path
+        for pattern in patterns
+        for path in home.glob(pattern)
+        if (path / "subagent-driven-development" / "SKILL.md").exists()
+    ]
 
 
 def find_drift(skills_dir: Path, lock_path: Path) -> list[str]:

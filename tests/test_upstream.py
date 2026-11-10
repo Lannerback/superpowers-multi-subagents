@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agent_router.upstream import WATCHED, find_drift, resolve_skills_dir, write_lock
+from agent_router.upstream import WATCHED, find_drift, host_skills_dirs, resolve_skills_dir, write_lock
 
 UPSTREAM = Path(__file__).resolve().parents[1] / "skills/subagent-driven-development-multi"
 
@@ -14,6 +14,26 @@ def plant(home: Path, relative: str) -> Path:
         (skills / name).parent.mkdir(parents=True, exist_ok=True)
         (skills / name).write_text(name)
     return skills
+
+
+class HostSkillsDirsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.home = Path(tempfile.mkdtemp())
+
+    def test_each_host_sees_only_its_own_cache(self) -> None:
+        claude = plant(self.home, ".claude/plugins/cache/m/superpowers/7.0.2/skills")
+        codex = plant(self.home, ".codex/plugins/cache/m/superpowers/7.0.2/skills")
+        self.assertEqual(host_skills_dirs("claude", self.home), [claude])
+        self.assertEqual(host_skills_dirs("codex", self.home), [codex])
+        self.assertEqual(host_skills_dirs("opencode", self.home), [])
+
+    def test_newest_version_comes_first(self) -> None:
+        plant(self.home, ".claude/plugins/cache/m/superpowers/7.0.2/skills")
+        newest = plant(self.home, ".claude/plugins/cache/m/superpowers/7.0.10/skills")
+        self.assertEqual(host_skills_dirs("claude", self.home)[0], newest)
+
+    def test_unknown_host_has_no_dirs(self) -> None:
+        self.assertEqual(host_skills_dirs("cursor", self.home), [])
 
 
 class ResolveTest(unittest.TestCase):
