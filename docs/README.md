@@ -39,7 +39,7 @@ The pieces:
 - **Config**, `config/agents.json`: which agents exist, their order, models, efforts and git policy.
 - **The git guard**, a `git` wrapper that blocks history-changing commands in the worker. See [git-policy.md](git-policy.md).
 - **Upstream**, found at run time in the plugin folders of your agents and never copied. The ledger, the review loop and the prompt templates are upstream's. See [upstream.md](upstream.md).
-- **Install**, `install.py` for symlinks, plus plugin and marketplace manifests for Claude Code, Codex and OpenCode. See [install.md](install.md).
+- **Install**, `install.py` for symlinks (and, only on request, superpowers itself for Claude Code and Codex), plus plugin and marketplace manifests for Claude Code, Codex and OpenCode. See [install.md](install.md).
 
 ## Files in this folder
 

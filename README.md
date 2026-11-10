@@ -4,7 +4,7 @@ Two skills that extend [superpowers](https://github.com/obra/superpowers) so pla
 
 ## Install
 
-> **Requires superpowers, already installed** (upstream: [obra/superpowers](https://github.com/obra/superpowers)). This project is only an extension of it and does nothing without it. `install.py` checks for it and stops with the install commands if it is missing. Per-agent commands for superpowers are [below](#install-superpowers-first).
+> **Requires superpowers, already installed** (upstream: [obra/superpowers](https://github.com/obra/superpowers)). This project is only an extension of it and does nothing without it. `install.py` checks for it and stops with the install commands if it is missing; to have the script install it for you, see below. Per-agent commands for superpowers are [below](#install-superpowers-first).
 
 Install these skills for every agent you have set up:
 
@@ -16,13 +16,23 @@ cd superpowers-multi-subagents
 
 `--host auto` links the skills, as symlinks so `git pull` updates them, into every agent whose config folder exists (Claude Code, Codex, OpenCode, Cursor) and skips the rest.
 
+To install superpowers in the same step, add `--install-superpowers`. It runs upstream's own install commands for Claude Code and Codex when they lack it, prints each command before running it, and links the skills only if superpowers is then found. OpenCode and Cursor are never installed for you: the script prints the manual step. Without the flag nothing is installed.
+
+```bash
+./install.py --host auto --install-superpowers
+```
+
 More options, such as installing for one agent, any other skills folder, and uninstalling, are in [docs/install.md](docs/install.md). For the project structure and architecture, see [docs/README.md](docs/README.md).
 
 ### Install from a marketplace
 
 Instead of the script, each agent can install it from this repo. In every case superpowers must already be installed.
 
-Claude Code (declares superpowers as a dependency):
+Claude Code. Add the superpowers marketplace first: the plugin declares superpowers as a dependency, and Claude installs it only from a marketplace you have already added. Without that, the plugin installs but reports "Dependency superpowers@superpowers-marketplace is not installed" and does not load:
+
+```bash
+claude plugin marketplace add obra/superpowers-marketplace
+```
 
 ```bash
 claude plugin marketplace add Lannerback/superpowers-multi-subagents
@@ -238,8 +248,8 @@ skills/subagent-driven-development-multi/scripts/agent-router upstream-check --a
 
 ```bash
 PYTHONPATH=skills/subagent-driven-development-multi python3 -m unittest discover -s tests -v
-ruff check skills install.py
-uvx mypy --strict skills/subagent-driven-development-multi/agent_router install.py
+ruff check skills install.py superpowers_installers
+uvx mypy --strict skills/subagent-driven-development-multi/agent_router install.py superpowers_installers
 ```
 
 ## Credits and license
