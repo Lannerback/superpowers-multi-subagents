@@ -1,0 +1,11 @@
+{
+  "name": "superpowers-multi-subagents",
+  "version": "0.1.0",
+  "description": "Extension for superpowers (required): runs plan tasks on external agents, with host subagents as fallback",
+  "license": "MIT",
+  "author": "Adriano D'Aguanno",
+  "repository": "https://github.com/Lannerback/superpowers-multi-subagents",
+  "type": "module",
+  "main": ".opencode/plugins/superpowers-multi-subagents.js",
+  "keywords": ["skills", "superpowers", "subagents", "opencode"]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "superpowers-multi-subagents",
+  "description": "Extension for superpowers. Requires superpowers to be installed.",
+  "owner": {
+    "name": "Adriano D'Aguanno"
+  },
+  "allowCrossMarketplaceDependenciesOn": ["superpowers-marketplace"],
+  "plugins": [
+    {
+      "name": "superpowers-multi-subagents",
+      "source": "./",
+      "description": "Extension for superpowers (required): runs plan tasks on external agents, with host subagents as fallback",
+      "category": "development",
+      "tags": ["superpowers", "subagents", "multi-agent"]
+    }
+  ]
+}

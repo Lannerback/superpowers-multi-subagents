@@ -2,6 +2,54 @@
 
 Two skills that extend [superpowers](https://github.com/obra/superpowers) so plan tasks run on external agents, and the session you launch from saves its tokens for last.
 
+## Install
+
+> **Requires superpowers, already installed** (upstream: [obra/superpowers](https://github.com/obra/superpowers)). This project is only an extension of it and does nothing without it. `install.py` checks for it and stops with the install commands if it is missing. Per-agent commands for superpowers are [below](#install-superpowers-first).
+
+Install these skills for every agent you have set up:
+
+```bash
+git clone https://github.com/Lannerback/superpowers-multi-subagents.git
+cd superpowers-multi-subagents
+./install.py --host auto
+```
+
+`--host auto` links the skills, as symlinks so `git pull` updates them, into every agent whose config folder exists (Claude Code, Codex, OpenCode, Cursor) and skips the rest.
+
+More options, such as installing for one agent, any other skills folder, and uninstalling, are in [docs/install.md](docs/install.md). For the project structure and architecture, see [docs/README.md](docs/README.md).
+
+### Install from a marketplace
+
+Instead of the script, each agent can install it from this repo. In every case superpowers must already be installed.
+
+Claude Code (declares superpowers as a dependency):
+
+```bash
+claude plugin marketplace add Lannerback/superpowers-multi-subagents
+```
+
+```bash
+claude plugin install superpowers-multi-subagents@superpowers-multi-subagents
+```
+
+Codex:
+
+```bash
+codex plugin marketplace add Lannerback/superpowers-multi-subagents
+```
+
+```bash
+codex plugin add superpowers-multi-subagents@superpowers-multi-subagents
+```
+
+OpenCode has no marketplace. Add the plugin to `~/.config/opencode/opencode.json`, as `"plugins"` on OpenCode 2.0.4 or later and as `"plugin"` before that. It registers the skills only when superpowers is found:
+
+```json
+{ "plugins": ["superpowers-multi-subagents@git+https://github.com/Lannerback/superpowers-multi-subagents.git"] }
+```
+
+## What it adds
+
 | Skill | Purpose |
 |---|---|
 | `writing-plans-multi-subagents` | Runs superpowers `writing-plans`, and adds a tier and effort to each task |
@@ -24,9 +72,9 @@ Both defer to upstream, so superpowers updates keep reaching you. Upstream's led
 - Superpowers installed for each agent you launch from. See below.
 - The CLI of each agent you enable, signed in.
 
-## Install
+## Install superpowers first
 
-**1. Install superpowers.** Upstream installs separately per agent:
+Upstream installs separately per agent:
 
 | Agent | Command |
 |---|---|
@@ -38,28 +86,16 @@ Both defer to upstream, so superpowers updates keep reaching you. Upstream's led
 
 Claude's official marketplace can lag: it was at 7.0.0 when upstream was at 7.0.2.
 
-**2. Install these skills**, as symlinks, so `git pull` updates them:
+## Configure and check
 
-```bash
-git clone https://github.com/Lannerback/superpowers-multi-subagents.git
-cd superpowers-multi-subagents
-./install.py --host auto
-```
-
-`auto` installs for every agent whose config folder exists and skips the others. Name agents instead to pick them: `--host claude codex opencode cursor` (`codex` and `cursor` share `~/.agents/skills`). An agent whose config folder is missing is skipped; `--force-host` installs anyway. For any other agent that loads `SKILL.md` folders:
-
-```bash
-./install.py --target ~/path/to/its/skills
-```
-
-**3. Configure agents.** Copy the shipped config and edit it. Your copy overrides the shipped one and stays out of git:
+**Configure agents.** Copy the shipped config and edit it. Your copy overrides the shipped one and stays out of git:
 
 ```bash
 mkdir -p ~/.config/superpowers-multi-subagents
 cp skills/subagent-driven-development-multi/config/agents.json ~/.config/superpowers-multi-subagents/agents.json
 ```
 
-**4. Check it:**
+**Check it:**
 
 ```bash
 skills/subagent-driven-development-multi/scripts/agent-router doctor --host claude --smoke
@@ -205,3 +241,11 @@ PYTHONPATH=skills/subagent-driven-development-multi python3 -m unittest discover
 ruff check skills install.py
 uvx mypy --strict skills/subagent-driven-development-multi/agent_router install.py
 ```
+
+## Credits and license
+
+This project is an extension of [obra/superpowers](https://github.com/obra/superpowers), by Jesse Vincent, which is MIT licensed. It contains none of upstream's files: the skills call your installed copy at run time.
+
+This project is MIT licensed, Copyright (c) 2026 Adriano D'Aguanno. See [LICENSE](LICENSE), and [docs/license.md](docs/license.md) for what that means for using, changing and sharing it.
+
+It is not affiliated with or endorsed by superpowers or its author. Superpowers must be installed separately.

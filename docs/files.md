@@ -3,7 +3,12 @@
 ```
 .
 ├── README.md                          install, config, risks
-├── install.py                         symlinks the skills into each agent
+├── LICENSE                            MIT license
+├── install.py                         symlinks the skills into each agent, checks superpowers
+├── package.json, index.js             OpenCode plugin entry
+├── .opencode/plugins/                 the OpenCode plugin
+├── .claude-plugin/                    Claude Code plugin and marketplace manifests
+├── .codex-plugin/, .agents/plugins/   Codex plugin and marketplace manifests
 ├── docs/                              this folder
 ├── skills/
 │   ├── writing-plans-multi-subagents/
@@ -64,12 +69,18 @@ Not in git: `.superpowers/` (per-plan workspaces and ledgers), `.plans/`, caches
 | `doctor.py` | Checks that each enabled agent's command is on `PATH`, and with `--smoke` sends it a one-line prompt |
 | `upstream.py` | Finds the installed superpowers skills folder, and compares watched upstream files with the lock |
 
-## Install
+## Install and packaging
 
 | File | Purpose |
 |---|---|
 | `install.py` | See [install.md](install.md) |
+| `.claude-plugin/plugin.json` | Claude Code plugin manifest. Declares superpowers as a dependency |
+| `.claude-plugin/marketplace.json` | Claude Code marketplace listing this plugin, and allows the superpowers dependency to come from its marketplace |
+| `.codex-plugin/plugin.json`, `.agents/plugins/marketplace.json` | Codex plugin manifest and marketplace listing |
+| `package.json`, `index.js` | OpenCode package metadata and the directory-form entry for OpenCode 2.x |
+| `.opencode/plugins/superpowers-multi-subagents.js` | The OpenCode plugin: registers the skills, only when superpowers is found |
+| `LICENSE`, [license.md](license.md) | The MIT license and what it means for this project |
 
 ## Tests, `tests/`
 
-One `unittest` file per area: `test_config`, `test_router`, `test_runtime` (process runner, outcomes, environment), `test_cli` (end-to-end, including the real git guard), `test_git_guard`, `test_git_grants`, `test_doctor`, `test_upstream`, `test_review_package`, `test_install`, `test_skills` (checks the skill texts). Run them with the command in the README's Development section.
+One `unittest` file per area: `test_config`, `test_router`, `test_runtime` (process runner, outcomes, environment), `test_cli` (end-to-end, including the real git guard), `test_git_guard`, `test_git_grants`, `test_doctor`, `test_upstream`, `test_review_package`, `test_install`, `test_skills` (checks the skill texts), `test_packaging` (manifests, license, README structure, OpenCode plugin). Run them with the command in the README's Development section.

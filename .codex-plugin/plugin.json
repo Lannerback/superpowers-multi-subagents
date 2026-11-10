@@ -1,0 +1,23 @@
+{
+  "name": "superpowers-multi-subagents",
+  "version": "0.1.0",
+  "description": "Extension for superpowers (required, install it first): runs plan tasks on external agents such as OpenCode, Codex, Claude Code, Cursor and aider, with host subagents as fallback",
+  "author": {
+    "name": "Adriano D'Aguanno",
+    "url": "https://github.com/Lannerback"
+  },
+  "homepage": "https://github.com/Lannerback/superpowers-multi-subagents",
+  "repository": "https://github.com/Lannerback/superpowers-multi-subagents",
+  "license": "MIT",
+  "keywords": ["skills", "superpowers", "subagents", "multi-agent", "planning"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Superpowers Multi-Subagents",
+    "shortDescription": "Run superpowers plan tasks on external agents",
+    "longDescription": "An extension for superpowers, which must be installed first. It adds a tier and effort to each plan task and sends every dispatch through a router that picks an installed agent (OpenCode, Codex, Claude Code, Cursor, aider) and falls back to host subagents.",
+    "developerName": "Adriano D'Aguanno",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://github.com/Lannerback/superpowers-multi-subagents"
+  }
+}

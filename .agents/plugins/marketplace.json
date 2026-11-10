@@ -1,0 +1,17 @@
+{
+  "name": "superpowers-multi-subagents",
+  "interface": {
+    "displayName": "Superpowers Multi-Subagents"
+  },
+  "plugins": [
+    {
+      "name": "superpowers-multi-subagents",
+      "source": { "source": "local", "path": "./" },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
