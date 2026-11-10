@@ -12,6 +12,11 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "skills" / "subagent-driven-development-multi"))
 
 from agent_router.upstream import resolve_skills_dir  # noqa: E402
+from superpowers_installers.registry import INSTALLERS  # noqa: E402
+from superpowers_installers.runner import SubprocessRunner  # noqa: E402
+from superpowers_installers.service import drift_warnings, install_missing  # noqa: E402
+
+LOCK_PATH = ROOT / "skills" / "subagent-driven-development-multi" / "config" / "upstream-lock.json"
 
 HOST_TARGETS = {
     "claude": ".claude/skills",
@@ -34,7 +39,9 @@ SUPERPOWERS_HELP = """superpowers is required and was not found. Install it firs
   Codex:       codex plugin marketplace add obra/superpowers
                codex plugin add superpowers@superpowers-dev
   OpenCode:    add "superpowers@git+https://github.com/obra/superpowers.git" to the plugins list in opencode.json
+  Cursor:      in Agent chat, run /add-plugin superpowers
   Others:      install it as upstream describes, then set SUPERPOWERS_SKILLS_DIR to its skills folder
+Or let this script install it for Claude Code and Codex: ./install.py --host auto --install-superpowers
 Then run this script again. To install anyway, use --skip-superpowers-check."""
 
 
@@ -54,6 +61,23 @@ def find_superpowers(home: Path, environ: Mapping[str, str]) -> Path | None:
         return resolve_skills_dir(home, environ)
     except LookupError:
         return None
+
+
+def ensure_superpowers(hosts: list[str], install_it: bool) -> bool:
+    """True when linking may go ahead. With install_it, install it for hosts that lack it first."""
+    home = Path.home()
+    failed = False
+    if install_it:
+        results = install_missing(hosts, home, INSTALLERS, SubprocessRunner(), print)
+        failed = any(result.failed for result in results)
+    found = find_superpowers(home, os.environ)
+    if found is not None and not failed:
+        if install_it:
+            for line in drift_warnings(found, LOCK_PATH):
+                print(line)
+        return True
+    print(SUPERPOWERS_HELP, file=sys.stderr)
+    return False
 
 
 def install(skills_root: Path, target: Path) -> list[str]:
@@ -92,9 +116,14 @@ def main() -> int:
         help="create the skills folder even when the agent's config folder does not exist",
     )
     parser.add_argument("--target", help="skills folder for any other agent")
-    parser.add_argument(
+    superpowers = parser.add_mutually_exclusive_group()
+    superpowers.add_argument(
         "--skip-superpowers-check", action="store_true",
         help="install even when superpowers is not found",
+    )
+    superpowers.add_argument(
+        "--install-superpowers", action="store_true",
+        help="install superpowers for Claude Code and Codex when missing, then link the skills",
     )
     parser.add_argument("--uninstall", action="store_true")
     args = parser.parse_args()
@@ -106,8 +135,10 @@ def main() -> int:
         targets.append(Path(args.target).expanduser())
     if not targets:
         parser.error("nothing to install: no agent config folder found. Use --host with --force-host, or --target")
-    if not (args.uninstall or args.skip_superpowers_check) and find_superpowers(Path.home(), os.environ) is None:
-        print(SUPERPOWERS_HELP, file=sys.stderr)
+    if args.uninstall:
+        if args.install_superpowers:
+            print("note: --install-superpowers is ignored with --uninstall")
+    elif not args.skip_superpowers_check and not ensure_superpowers(hosts, args.install_superpowers):
         return 2
     skills_root = ROOT / "skills"
     action = uninstall if args.uninstall else install
